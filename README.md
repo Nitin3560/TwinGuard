@@ -84,7 +84,7 @@ The reference experiment uses a multi-UAV formation mission:
 Planned nodes and packages:
 
 - `twinguard_swarm_integrity_cpp`: C++ package for digital-twin integrity scoring, trust, fault labels, and authority scaling.
-- `integrity_node_cpp`: C++ ROS 2 node for publishing integrity diagnostics.
+- `integrity_node_cpp`: C++ ROS 2 node that subscribes to PX4 `VehicleOdometry`, predicts expected state, and publishes residual/trust diagnostics.
 - `digital_twin_node`: predicts per-UAV expected state.
 - `formation_supervisor`: generates trust-aware formation setpoints.
 - `attack_injector`: injects reproducible sensor/communication faults.
@@ -115,7 +115,7 @@ Official references:
 
 ## Implementation Status
 
-This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, and initial supervisor node scaffolding. The next engineering milestone is to bind the C++ integrity node and supervisor logic to PX4 `px4_msgs` odometry and offboard-control topics in the target PX4/Gazebo environment.
+This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, and initial supervisor node scaffolding. The C++ integrity node includes the first live PX4 data path by subscribing to `px4_msgs/msg/VehicleOdometry` and publishing trust/residual diagnostics. The next engineering milestone is to validate that path against one PX4 `gz_x500` SITL vehicle, then connect supervisor logic to PX4 offboard-control topics.
 
 ## Intended Outcome
 

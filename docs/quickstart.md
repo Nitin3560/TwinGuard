@@ -65,5 +65,17 @@ source install/setup.bash
 ros2 launch twinguard_swarm_bringup twinguard_integrity.launch.py
 ```
 
-The initial launch starts diagnostics placeholders. The next implementation step is to bind the nodes to PX4 odometry and offboard-control topics.
+The launch starts the C++ integrity node and the initial formation supervisor. The C++ node expects PX4 odometry on:
 
+```text
+/drone_0/fmu/out/vehicle_odometry
+```
+
+Expected diagnostic outputs:
+
+```text
+/drone_0/twinguard/integrity_diagnostics
+/drone_0/twinguard/trust_state
+```
+
+If PX4 odometry is not available, the integrity node reports a stale/waiting diagnostic instead of publishing a healthy trust score.

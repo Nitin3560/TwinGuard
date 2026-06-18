@@ -24,6 +24,12 @@ px4_msgs/msg/SensorGps
 px4_msgs/msg/VehicleImu
 ```
 
+Current implemented binding:
+
+```text
+/drone_0/fmu/out/vehicle_odometry -> integrity_node_cpp
+```
+
 ## Commands To PX4
 
 ```text

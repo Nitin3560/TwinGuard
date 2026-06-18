@@ -136,9 +136,10 @@ Metrics:
 ## Milestones
 
 1. Build ROS 2 packages and launch files.
-2. Bind integrity inputs to PX4 odometry and vehicle status topics.
-3. Add deterministic attack injection for GPS spoofing and replay.
-4. Publish trust and fault diagnostics per UAV.
-5. Generate trust-aware formation setpoints.
-6. Record experiment logs and compute metrics.
-7. Generate command-center replay from recorded logs.
+2. Validate one PX4 `gz_x500` vehicle publishing `VehicleOdometry` into the C++ integrity node.
+3. Bind additional integrity inputs to PX4 GPS, IMU, and vehicle status topics.
+4. Add deterministic attack injection for GPS spoofing and replay.
+5. Publish trust and fault diagnostics per UAV.
+6. Generate trust-aware formation setpoints.
+7. Record experiment logs and compute metrics.
+8. Generate command-center replay from recorded logs.

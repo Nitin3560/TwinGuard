@@ -13,6 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
+find_package(px4_msgs REQUIRED)
 
 include_directories(include)
 
@@ -38,6 +39,7 @@ ament_target_dependencies(integrity_node_cpp
   std_msgs
   geometry_msgs
   diagnostic_msgs
+  px4_msgs
 )
 
 install(

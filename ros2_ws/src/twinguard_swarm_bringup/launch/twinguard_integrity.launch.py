@@ -11,7 +11,16 @@ def generate_launch_description():
                 name="integrity_drone_0_cpp",
                 namespace="drone_0/twinguard",
                 output="screen",
-                parameters=[{"drone_id": 0}],
+                parameters=[
+                    {
+                        "drone_id": 0,
+                        "stale_timeout_ms": 500,
+                        "prediction_dt": 0.1,
+                    }
+                ],
+                remappings=[
+                    ("fmu/out/vehicle_odometry", "/drone_0/fmu/out/vehicle_odometry"),
+                ],
             ),
             Node(
                 package="twinguard_swarm_integrity",
