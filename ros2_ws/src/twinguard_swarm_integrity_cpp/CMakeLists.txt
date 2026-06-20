@@ -14,6 +14,9 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(behaviortree_cpp_v3 REQUIRED)
+find_package(twinguard_swarm_planning_cpp REQUIRED)
 
 include_directories(include)
 
@@ -57,6 +60,9 @@ ament_target_dependencies(formation_supervisor_node
   geometry_msgs
   diagnostic_msgs
   px4_msgs
+  ament_index_cpp
+  behaviortree_cpp_v3
+  twinguard_swarm_planning_cpp
 )
 
 install(

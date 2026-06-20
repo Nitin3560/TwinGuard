@@ -1,21 +1,14 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>twinguard_swarm_integrity_cpp</name>
+  <name>twinguard_swarm_planning_cpp</name>
   <version>0.1.0</version>
-  <description>C++ digital-twin integrity scoring and trust management for UAV swarm supervision.</description>
+  <description>Behavior-tree mission supervision and local A* replanning for TwinGuard.</description>
   <maintainer email="nitin@example.com">Nitin</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>rclcpp</depend>
-  <depend>std_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>diagnostic_msgs</depend>
-  <depend>px4_msgs</depend>
-  <depend>ament_index_cpp</depend>
   <depend>behaviortree_cpp_v3</depend>
-  <depend>twinguard_swarm_planning_cpp</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

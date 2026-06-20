@@ -1,0 +1,22 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Fallback name="root_fallback">
+      <Sequence name="attack_hold">
+        <IsSuspectedAttack/>
+        <PublishHoldSetpoint/>
+      </Sequence>
+
+      <Sequence name="reroute_branch">
+        <NeedsReplan/>
+        <ComputeAStarPath/>
+        <PublishPathSetpoint/>
+      </Sequence>
+
+      <Sequence name="nominal_branch">
+        <ComputeMissionSetpoint/>
+        <TrajectoryClear/>
+        <PublishMissionSetpoint/>
+      </Sequence>
+    </Fallback>
+  </BehaviorTree>
+</root>

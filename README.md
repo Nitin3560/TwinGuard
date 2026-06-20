@@ -11,6 +11,8 @@ The project is designed to support repeatable experiments where a UAV swarm perf
 - PX4 SITL multicopter simulation in Gazebo
 - ROS 2 integration for state, command, diagnostics, and logging
 - C++ integrity scoring and trust-management core
+- BehaviorTree.CPP mission supervision for hold, reroute, and nominal flight branches
+- Local A* replanning over a coarse static 3D voxel grid for known no-fly volumes
 - Multi-UAV formation supervision
 - Per-agent digital twin prediction
 - Residual and normalized-innovation-based anomaly scoring
@@ -62,6 +64,7 @@ TwinGuard-Swarm-Gazebo/
 │   └── src/
 │       ├── twinguard_swarm_bringup/
 │       ├── twinguard_dataset_replay/
+│       ├── twinguard_swarm_planning_cpp/
 │       ├── twinguard_swarm_integrity_cpp/
 │       └── twinguard_swarm_integrity/
 ├── experiments/
@@ -89,6 +92,7 @@ Implemented and planned nodes/packages:
 - `twinguard_swarm_integrity_cpp`: C++ package for digital-twin integrity scoring, trust, fault labels, and authority scaling.
 - `integrity_node_cpp`: C++ ROS 2 node that subscribes to PX4 `VehicleOdometry`, predicts expected state, and publishes residual/trust diagnostics.
 - `formation_supervisor_node`: C++ ROS 2 node that subscribes to TwinGuard trust/diagnostics and PX4 odometry, generates static-hold or circular mission setpoints, then publishes trust-gated `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand` messages.
+- `twinguard_swarm_planning_cpp`: C++ package with BehaviorTree.CPP leaves and a pure A* local planner for static obstacle/no-fly-volume rerouting.
 - `dataset_replay_node`: Python ROS 2 bridge that applies a real dataset degradation profile to live PX4 odometry for validation and recording.
 - `digital_twin_node`: predicts per-UAV expected state.
 - `attack_injector`: injects reproducible sensor/communication faults.
@@ -96,6 +100,7 @@ Implemented and planned nodes/packages:
 
 The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The latency-sensitive integrity/scoring and trust-gated offboard-supervision paths are implemented in C++; Python is reserved for launch-time orchestration, experiment tooling, dataset replay, and mission-control prototyping.
 A single trust-gated supervisor (`formation_supervisor_node`) handles both static-hold and circular-mission modes, validated against both live PX4 SITL odometry and real-dataset-replay-perturbed odometry.
+Phase 2 adds an explicit Behavior Tree above the offboard supervisor: suspected attacks publish a hold setpoint, blocked straight-line paths invoke A* rerouting around configured static obstacles, and otherwise the nominal mission setpoint is used. The final `OffboardSupervisor::step()` authority gate still decides whether to pass through, slow down, or hard-hold.
 
 ## Single-UAV PX4 Validation Run
 
@@ -205,7 +210,7 @@ Official references:
 
 ## Implementation Status
 
-This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, C++ trust-gated formation supervisor, and real dataset replay bridge. The current Phase 1 path closes the loop from PX4 odometry to C++ trust scoring to C++ offboard command publication: nominal trust passes the mission setpoint through, degraded trust scales authority, and suspected attack holds current position. The C++ supervisor also owns the repeatable circular mission used by the single- and three-UAV validation launches. The next engineering milestone is to extend this into explicit planner-assurance logic.
+This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, C++ trust-gated formation supervisor, BehaviorTree.CPP mission selection, local A* rerouting, and real dataset replay bridge. The current Phase 2 path closes the loop from PX4 odometry to C++ trust scoring to BT-guided setpoint selection to C++ offboard command publication: suspected attack selects hold, blocked paths select A* reroute, nominal paths use the mission setpoint, and the final authority supervisor can still slow or hold the vehicle. Trajectory-risk monitoring is stubbed as a no-op `TrajectoryClear` BT condition until a shared multi-agent trajectory-intent topic is added.
 
 ## Intended Outcome
 

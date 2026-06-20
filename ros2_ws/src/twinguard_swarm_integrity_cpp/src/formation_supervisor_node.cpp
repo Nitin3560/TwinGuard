@@ -8,7 +8,10 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "ament_index_cpp/get_package_share_directory.hpp"
+#include "behaviortree_cpp_v3/bt_factory.h"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
@@ -18,6 +21,8 @@
 #include "px4_msgs/msg/vehicle_command.hpp"
 #include "px4_msgs/msg/vehicle_odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "twinguard_swarm_planning_cpp/astar_planner.hpp"
+#include "twinguard_swarm_planning_cpp/bt_nodes.hpp"
 
 namespace twinguard::offboard
 {
@@ -49,6 +54,27 @@ public:
     mission_params_.center_y = declare_parameter<double>("center_y_m", nominal_setpoint_[1]);
     mission_params_.altitude_m = std::abs(nominal_setpoint_[2]);
     start_time_ = get_clock()->now();
+    const bool obstacle_enabled = declare_parameter<bool>("static_obstacle_enabled", false);
+    if (obstacle_enabled) {
+      obstacles_.push_back(twinguard::planning::Obstacle{
+        {
+          declare_parameter<double>("static_obstacle_x_m", 0.0),
+          declare_parameter<double>("static_obstacle_y_m", 0.0),
+          declare_parameter<double>("static_obstacle_z_m", -2.0),
+        },
+        declare_parameter<double>("static_obstacle_radius_m", 1.0),
+      });
+    }
+    const std::string default_tree_path =
+      ament_index_cpp::get_package_share_directory("twinguard_swarm_planning_cpp") +
+      "/trees/twinguard_mission.xml";
+    const std::string tree_path = declare_parameter<std::string>(
+      "behavior_tree_xml",
+      default_tree_path);
+    bt_blackboard_ = BT::Blackboard::create();
+    BT::BehaviorTreeFactory factory;
+    twinguard::planning::registerTwinGuardBtNodes(factory);
+    bt_tree_ = std::make_unique<BT::Tree>(factory.createTreeFromFile(tree_path, bt_blackboard_));
 
     supervisor_ = OffboardSupervisor(nominal_velocity_limit_, degraded_threshold_);
 
@@ -153,13 +179,31 @@ private:
     const std::array<double, 3> current = odometry_stale ? nominal_setpoint_ : current_position_;
     const std::string fault = odometry_stale ? "suspected_attack" : fault_label_;
     const double authority = odometry_stale ? 0.15 : authority_scale_;
-    std::array<double, 3> nominal = nominal_setpoint_;
-    double yaw = nominal_yaw_;
+    std::array<double, 3> mission = nominal_setpoint_;
+    double mission_yaw = nominal_yaw_;
 
     if (mission_params_.mode == "circle") {
       const double elapsed_s = (now - start_time_).seconds();
-      nominal = circle_mission_setpoint(mission_params_, elapsed_s, authority);
-      yaw = circle_mission_yaw(mission_params_, elapsed_s, authority);
+      mission = circle_mission_setpoint(mission_params_, elapsed_s, authority);
+      mission_yaw = circle_mission_yaw(mission_params_, elapsed_s, authority);
+    }
+
+    std::array<double, 3> nominal = mission;
+    double yaw = mission_yaw;
+    if (bt_tree_ && bt_blackboard_) {
+      bt_blackboard_->set("current_position", current);
+      bt_blackboard_->set("fault_label", fault);
+      bt_blackboard_->set("authority_scale", authority);
+      bt_blackboard_->set("mission_setpoint", mission);
+      bt_blackboard_->set("mission_yaw", mission_yaw);
+      bt_blackboard_->set("obstacles", obstacles_);
+      bt_blackboard_->set("computed_setpoint", mission);
+      bt_blackboard_->set("computed_yaw", mission_yaw);
+      const BT::NodeStatus tree_status = bt_tree_->tickRoot();
+      if (tree_status == BT::NodeStatus::SUCCESS) {
+        nominal = bt_blackboard_->get<std::array<double, 3>>("computed_setpoint");
+        yaw = bt_blackboard_->get<double>("computed_yaw");
+      }
     }
 
     const SetpointCommand command = supervisor_.step(
@@ -314,6 +358,9 @@ private:
   std::array<double, 3> nominal_setpoint_{0.0, 0.0, -2.0};
   std::array<double, 3> current_position_{0.0, 0.0, 0.0};
   CircleMissionParams mission_params_;
+  std::vector<twinguard::planning::Obstacle> obstacles_;
+  BT::Blackboard::Ptr bt_blackboard_;
+  std::unique_ptr<BT::Tree> bt_tree_;
   rclcpp::Time start_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_odometry_time_{0, 0, RCL_ROS_TIME};
   OffboardSupervisor supervisor_;
