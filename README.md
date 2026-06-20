@@ -18,6 +18,7 @@ The project is designed to support repeatable experiments where a UAV swarm perf
 - GPS spoofing, communication dropout, and replay-attack scenarios
 - Experiment logging for RMSE, recovery time, trust, residuals, and mission success
 - Command-center replay generated from experiment logs
+- Real dataset replay into live PX4/Gazebo odometry for video-recordable validation
 
 ## System Architecture
 
@@ -55,10 +56,12 @@ TwinGuard-Swarm-Gazebo/
 │   ├── engineering_plan.md
 │   ├── environment.md
 │   ├── quickstart.md
+│   ├── real_dataset_replay.md
 │   └── topic_contract.md
 ├── ros2_ws/
 │   └── src/
 │       ├── twinguard_swarm_bringup/
+│       ├── twinguard_dataset_replay/
 │       ├── twinguard_swarm_integrity_cpp/
 │       └── twinguard_swarm_integrity/
 ├── experiments/
@@ -85,12 +88,99 @@ Planned nodes and packages:
 
 - `twinguard_swarm_integrity_cpp`: C++ package for digital-twin integrity scoring, trust, fault labels, and authority scaling.
 - `integrity_node_cpp`: C++ ROS 2 node that subscribes to PX4 `VehicleOdometry`, predicts expected state, and publishes residual/trust diagnostics.
+- `dataset_replay_node`: Python ROS 2 bridge that applies a real dataset degradation profile to live PX4 odometry for validation and recording.
+- `offboard_mission_controller`: ROS 2 PX4 offboard controller that publishes `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand` messages for repeatable mission flight.
 - `digital_twin_node`: predicts per-UAV expected state.
 - `formation_supervisor`: generates trust-aware formation setpoints.
 - `attack_injector`: injects reproducible sensor/communication faults.
 - `experiment_logger`: records CSV and rosbag2 outputs.
 
-The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The latency-sensitive integrity/scoring path is implemented in C++; Python is reserved for launch-time orchestration, experiment tooling, and rapid prototyping.
+The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The latency-sensitive integrity/scoring path is implemented in C++; Python is reserved for launch-time orchestration, experiment tooling, dataset replay, and mission-control prototyping.
+
+## Single-UAV PX4 Validation Run
+
+The current live validation path runs one PX4 `gz_x500` vehicle, replays a real failure/degradation dataset into the odometry stream, scores the perturbed state with the C++ TwinGuard integrity node, and flies a repeatable offboard mission in Gazebo.
+
+Terminal 1:
+
+```bash
+cd ~/PX4-Autopilot
+make px4_sitl gz_x500
+```
+
+Terminal 2:
+
+```bash
+cd ~/Micro-XRCE-DDS-Agent/build
+MicroXRCEAgent udp4 -p 8888
+```
+
+Terminal 3:
+
+```bash
+cd ~/px4_ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch twinguard_swarm_bringup twinguard_single_uav_replay_mission.launch.py \
+  dataset_csv:=/home/nitin/scenario23_seq20_real_channel_timeseries.csv \
+  error_scale:=0.1 \
+  max_offset_m:=3.0 \
+  mission_radius_m:=3.0 \
+  takeoff_altitude_m:=2.0
+```
+
+The real dataset is used as a replayed degradation profile for sensor/integrity validation. It does not replace the PX4 flight controller or directly define the UAV path. The offboard mission controller owns the flight trajectory; TwinGuard owns the integrity/trust response.
+
+## Three-UAV Formation Validation Run
+
+The next validation target is a lightweight swarm run with three PX4 `x500` vehicles:
+
+```text
+Drone 0: nominal leader-style mission controller
+Drone 1: nominal formation follower
+Drone 2: dataset-degraded UAV with TwinGuard replay/integrity scoring
+```
+
+The formation uses three synchronized offboard mission controllers with fixed spatial offsets. Drone 2 receives the real dataset replay on its integrity path so the video shows a visible swarm mission while the diagnostics show degradation, residual growth, and trust response for the affected vehicle.
+
+Start a three-vehicle PX4/Gazebo run using the multi-vehicle launch method supported by your PX4 checkout. Then confirm the generated ROS 2 odometry topics:
+
+```bash
+ros2 topic list | grep vehicle_odometry
+```
+
+The default launch arguments expect the common PX4 ROS 2 topic layout:
+
+```text
+/fmu/out/vehicle_odometry
+/px4_1/fmu/out/vehicle_odometry
+/px4_2/fmu/out/vehicle_odometry
+```
+
+Launch the TwinGuard formation mission:
+
+```bash
+cd ~/px4_ros2_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch twinguard_swarm_bringup twinguard_three_uav_replay_mission.launch.py \
+  dataset_csv:=/home/nitin/scenario23_seq20_real_channel_timeseries.csv
+```
+
+If your PX4 topics use different prefixes, override them explicitly:
+
+```bash
+ros2 launch twinguard_swarm_bringup twinguard_three_uav_replay_mission.launch.py \
+  dataset_csv:=/home/nitin/scenario23_seq20_real_channel_timeseries.csv \
+  drone_0_px4_prefix:="" \
+  drone_1_px4_prefix:=px4_1 \
+  drone_2_px4_prefix:=px4_2 \
+  drone_0_odometry:=/fmu/out/vehicle_odometry \
+  drone_1_odometry:=/px4_1/fmu/out/vehicle_odometry \
+  drone_2_odometry:=/px4_2/fmu/out/vehicle_odometry
+```
 
 ## Simulation Stack
 
@@ -115,7 +205,7 @@ Official references:
 
 ## Implementation Status
 
-This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, and initial supervisor node scaffolding. The C++ integrity node includes the first live PX4 data path by subscribing to `px4_msgs/msg/VehicleOdometry` and publishing trust/residual diagnostics. The next engineering milestone is to validate that path against one PX4 `gz_x500` SITL vehicle, then connect supervisor logic to PX4 offboard-control topics.
+This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, real dataset replay bridge, and an initial PX4 offboard mission controller. The current validated path is a single PX4 `gz_x500` vehicle with live odometry, dataset replay, C++ trust scoring, and offboard mission setpoints. The next engineering milestone is to extend the launch stack to multiple PX4 vehicle namespaces and promote the single-vehicle mission controller into a trust-aware swarm formation controller.
 
 ## Intended Outcome
 

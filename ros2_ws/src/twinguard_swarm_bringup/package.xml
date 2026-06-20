@@ -10,6 +10,8 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>twinguard_swarm_integrity</exec_depend>
+  <exec_depend>twinguard_swarm_integrity_cpp</exec_depend>
+  <exec_depend>twinguard_dataset_replay</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

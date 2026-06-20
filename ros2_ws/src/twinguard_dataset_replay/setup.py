@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = "twinguard_swarm_integrity"
+package_name = "twinguard_dataset_replay"
 
 setup(
     name=package_name,
@@ -10,17 +10,15 @@ setup(
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
     ],
-    install_requires=["setuptools", "numpy"],
+    install_requires=["setuptools"],
     zip_safe=True,
     maintainer="Nitin",
     maintainer_email="nitin@example.com",
-    description="Digital twin integrity, trust, and resilient formation logic for UAV swarms.",
+    description="ROS 2 dataset replay bridge for TwinGuard PX4/Gazebo validation.",
     license="MIT",
     entry_points={
         "console_scripts": [
-            "integrity_node = twinguard_swarm_integrity.integrity_node:main",
-            "formation_supervisor = twinguard_swarm_integrity.formation_supervisor:main",
-            "offboard_mission_controller = twinguard_swarm_integrity.offboard_mission_controller:main",
+            "dataset_replay_node = twinguard_dataset_replay.dataset_replay_node:main",
         ],
     },
 )

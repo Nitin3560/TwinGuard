@@ -1,18 +1,16 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>twinguard_swarm_integrity</name>
+  <name>twinguard_dataset_replay</name>
   <version>0.1.0</version>
-  <description>Digital twin integrity, trust, and resilient formation logic for UAV swarms.</description>
+  <description>ROS 2 dataset replay bridge for injecting real degradation profiles into live PX4 odometry.</description>
   <maintainer email="nitin@example.com">Nitin</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>px4_msgs</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
