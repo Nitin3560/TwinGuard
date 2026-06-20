@@ -95,8 +95,8 @@ Implemented and planned nodes/packages:
 - `integrity_node_cpp`: C++ ROS 2 node that subscribes to PX4 `VehicleOdometry`, predicts expected state, and publishes residual/trust diagnostics.
 - `formation_supervisor_node`: C++ ROS 2 node that subscribes to TwinGuard trust/diagnostics and PX4 odometry, generates static-hold or circular mission setpoints, then publishes trust-gated `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand` messages.
 - `twinguard_swarm_estimation_cpp`: C++ package with a 6-state EKF, sparse optical-flow visual odometry, and an opt-in EKF integrity node.
-- `ekf_integrity_node`: alternative integrity node that fuses PX4 position updates and visual-odometry velocity updates, then publishes the same `trust_state` contract consumed by the supervisor.
-- `visual_odometry_node`: converts bridged Gazebo camera/depth images into `TwistStamped` visual-odometry velocity estimates and quality diagnostics.
+- `ekf_integrity_node`: alternative integrity node that fuses PX4 position updates and quality-scored visual-odometry velocity updates, then publishes the same `trust_state` contract consumed by the supervisor.
+- `visual_odometry_node`: converts bridged Gazebo camera/depth images into per-feature-depth-scaled optical-flow velocity estimates plus atomic quality/velocity diagnostics.
 - `twinguard_swarm_planning_cpp`: C++ package with BehaviorTree.CPP leaves and a pure A* local planner for static obstacle/no-fly-volume rerouting.
 - `dataset_replay_node`: Python ROS 2 bridge that applies a real dataset degradation profile to live PX4 odometry for validation and recording.
 - `digital_twin_node`: predicts per-UAV expected state.
@@ -107,7 +107,7 @@ The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The late
 A single trust-gated supervisor (`formation_supervisor_node`) handles both static-hold and circular-mission modes, validated against both live PX4 SITL odometry and real-dataset-replay-perturbed odometry.
 Phase 2 adds an explicit Behavior Tree above the offboard supervisor: suspected attacks publish a hold setpoint, blocked straight-line paths invoke A* rerouting around configured static obstacles, and otherwise the nominal mission setpoint is used. The final `OffboardSupervisor::step()` authority gate still decides whether to pass through, slow down, or hard-hold.
 The local A* planner is intentionally scoped to short-horizon rerouting: with the default 0.5 m cell size and 32-cell extent, it solves roughly 32 m start-to-goal spans per axis around the current query. Larger or unreachable local plans fall back to the nominal branch rather than being claimed as global planning.
-Phase 3 adds an opt-in EKF path through `twinguard_ekf_integrity.launch.py`: launch PX4 with `gz_x500_depth`, bridge Gazebo RGB/depth camera topics into ROS 2, estimate sparse optical-flow velocity, and fuse that velocity with PX4 odometry in a 6-state EKF. This is visual odometry and trust-aware sensor fusion, not SLAM or mapping.
+Phase 3 adds an opt-in EKF path through `twinguard_ekf_integrity.launch.py`: launch PX4 with `gz_x500_depth`, bridge Gazebo RGB/depth camera topics into ROS 2, estimate sparse optical-flow velocity using per-feature depth scaling, and fuse that velocity with PX4 odometry in a 6-state EKF. This is visual odometry and trust-aware sensor fusion, not SLAM or mapping.
 
 ## Single-UAV PX4 Validation Run
 

@@ -84,7 +84,6 @@ def generate_launch_description():
                 ],
                 remappings=[
                     ("fmu/out/vehicle_odometry", "/drone_0/fmu/out/vehicle_odometry"),
-                    ("visual_odometry", "/drone_0/twinguard/visual_odometry"),
                     (
                         "visual_odometry_diagnostics",
                         "/drone_0/twinguard/visual_odometry_diagnostics",

@@ -29,13 +29,14 @@ public:
 
 private:
   void reseed_features(const cv::Mat & gray_frame);
-  double estimate_depth_scale(const cv::Mat & depth_frame) const;
+  double estimate_depth_scale_at(const cv::Mat & depth_frame, const cv::Point2f & point) const;
 
   cv::Mat previous_frame_;
   std::vector<cv::Point2f> previous_points_;
   int max_features_;
   bool has_previous_{false};
   double fallback_m_per_pixel_{0.01};
+  // Placeholder until x500_depth CameraInfo is wired in; used for pinhole depth scaling.
   double focal_length_px_{320.0};
 };
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <numeric>
 
 namespace twinguard::estimation
@@ -40,16 +41,17 @@ std::optional<VisualOdometryEstimate> SparseOpticalFlowVO::process_frame(
   std::vector<float> errors;
   cv::calcOpticalFlowPyrLK(previous_frame_, gray, previous_points_, next_points, status, errors);
 
-  double sum_dx = 0.0;
-  double sum_dy = 0.0;
+  double sum_vx_m = 0.0;
+  double sum_vy_m = 0.0;
   double sum_error = 0.0;
   int tracked = 0;
   for (std::size_t i = 0; i < status.size(); ++i) {
     if (!status[i]) {
       continue;
     }
-    sum_dx += static_cast<double>(next_points[i].x - previous_points_[i].x);
-    sum_dy += static_cast<double>(next_points[i].y - previous_points_[i].y);
+    const double m_per_pixel = estimate_depth_scale_at(depth_frame, previous_points_[i]);
+    sum_vx_m += static_cast<double>(next_points[i].x - previous_points_[i].x) * m_per_pixel;
+    sum_vy_m += static_cast<double>(next_points[i].y - previous_points_[i].y) * m_per_pixel;
     sum_error += i < errors.size() ? static_cast<double>(errors[i]) : 0.0;
     ++tracked;
   }
@@ -69,19 +71,18 @@ std::optional<VisualOdometryEstimate> SparseOpticalFlowVO::process_frame(
     return std::nullopt;
   }
 
-  const double mean_dx = sum_dx / static_cast<double>(tracked);
-  const double mean_dy = sum_dy / static_cast<double>(tracked);
+  const double mean_vx_m = sum_vx_m / static_cast<double>(tracked);
+  const double mean_vy_m = sum_vy_m / static_cast<double>(tracked);
   const double mean_error = sum_error / static_cast<double>(tracked);
   const double track_fraction = std::clamp(
     static_cast<double>(tracked) / static_cast<double>(max_features_), 0.0, 1.0);
   const double error_quality = 1.0 / (1.0 + mean_error / 10.0);
   const double quality = std::clamp(track_fraction * error_quality, 0.0, 1.0);
-  const double m_per_pixel = estimate_depth_scale(depth_frame);
 
   VisualOdometryEstimate estimate;
   estimate.velocity_estimate = {
-    mean_dx * m_per_pixel / dt_s,
-    mean_dy * m_per_pixel / dt_s,
+    mean_vx_m / dt_s,
+    mean_vy_m / dt_s,
     0.0,
   };
   estimate.quality = quality;
@@ -101,24 +102,26 @@ void SparseOpticalFlowVO::reseed_features(const cv::Mat & gray_frame)
     8.0);
 }
 
-double SparseOpticalFlowVO::estimate_depth_scale(const cv::Mat & depth_frame) const
+double SparseOpticalFlowVO::estimate_depth_scale_at(
+  const cv::Mat & depth_frame,
+  const cv::Point2f & point) const
 {
   if (depth_frame.empty()) {
     return fallback_m_per_pixel_;
   }
 
-  cv::Scalar mean_scalar;
+  const int x = std::clamp(static_cast<int>(std::lround(point.x)), 0, depth_frame.cols - 1);
+  const int y = std::clamp(static_cast<int>(std::lround(point.y)), 0, depth_frame.rows - 1);
+
+  double depth_m = 0.0;
   if (depth_frame.type() == CV_32FC1) {
-    cv::Mat finite_mask = depth_frame == depth_frame;
-    mean_scalar = cv::mean(depth_frame, finite_mask);
+    depth_m = static_cast<double>(depth_frame.at<float>(y, x));
   } else if (depth_frame.type() == CV_16UC1) {
-    mean_scalar = cv::mean(depth_frame);
-    mean_scalar[0] *= 0.001;
+    depth_m = static_cast<double>(depth_frame.at<uint16_t>(y, x)) * 0.001;
   } else {
     return fallback_m_per_pixel_;
   }
 
-  const double depth_m = mean_scalar[0];
   if (!std::isfinite(depth_m) || depth_m <= 0.05) {
     return fallback_m_per_pixel_;
   }

@@ -60,8 +60,13 @@ Gazebo x500_depth camera image -> ros_gz_image -> /drone_0/twinguard/camera/imag
 Gazebo x500_depth depth image  -> ros_gz_image -> /drone_0/twinguard/camera/depth
 /drone_0/twinguard/camera/image_raw -> visual_odometry_node
 /drone_0/twinguard/camera/depth     -> visual_odometry_node
-/drone_0/twinguard/visual_odometry  -> ekf_integrity_node
+/drone_0/twinguard/visual_odometry  <- visual_odometry_node observability output
+/drone_0/twinguard/visual_odometry_diagnostics -> ekf_integrity_node
 ```
+
+`visual_odometry_diagnostics` carries quality, tracked-feature count, tracking error, and
+the velocity estimate in one `DiagnosticArray` sample so `ekf_integrity_node` can apply
+quality-scaled VO measurement noise without racing a separate velocity topic.
 
 ## Commands To PX4
 

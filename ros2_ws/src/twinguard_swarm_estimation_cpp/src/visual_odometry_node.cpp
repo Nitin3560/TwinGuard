@@ -1,6 +1,7 @@
 #include "twinguard_swarm_estimation_cpp/visual_odometry.hpp"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 
@@ -98,7 +99,8 @@ private:
       "visual_odometry_active",
       estimate->quality,
       estimate->tracked_features,
-      estimate->mean_tracking_error);
+      estimate->mean_tracking_error,
+      estimate->velocity_estimate);
   }
 
   void publish_diagnostics(
@@ -106,7 +108,8 @@ private:
     const std::string & message,
     double quality,
     int tracked_features,
-    double mean_error)
+    double mean_error,
+    std::array<double, 3> velocity = {0.0, 0.0, 0.0})
   {
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.name = "twinguard/visual_odometry";
@@ -119,6 +122,9 @@ private:
       kv("quality", std::to_string(quality)),
       kv("tracked_features", std::to_string(tracked_features)),
       kv("mean_tracking_error", std::to_string(mean_error)),
+      kv("velocity_x", std::to_string(velocity[0])),
+      kv("velocity_y", std::to_string(velocity[1])),
+      kv("velocity_z", std::to_string(velocity[2])),
     };
 
     diagnostic_msgs::msg::DiagnosticArray diagnostics;

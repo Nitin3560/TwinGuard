@@ -12,7 +12,6 @@
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
 #include "geometry_msgs/msg/point_stamped.hpp"
-#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "px4_msgs/msg/vehicle_odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -43,12 +42,6 @@ public:
       rclcpp::SensorDataQoS(),
       [this](const px4_msgs::msg::VehicleOdometry::SharedPtr msg) {
         handle_odometry(*msg);
-      });
-    vo_sub_ = create_subscription<geometry_msgs::msg::TwistStamped>(
-      "visual_odometry",
-      10,
-      [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) {
-        handle_visual_odometry(*msg);
       });
     vo_diag_sub_ = create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
       "visual_odometry_diagnostics",
@@ -97,37 +90,52 @@ private:
     last_odometry_time_ = now;
   }
 
-  void handle_visual_odometry(const geometry_msgs::msg::TwistStamped & msg)
-  {
-    if (!has_odometry_) {
-      return;
-    }
-
-    const std::array<double, 3> velocity{
-      msg.twist.linear.x,
-      msg.twist.linear.y,
-      msg.twist.linear.z,
-    };
-    const double vo_noise_std = base_vo_noise_std_ / std::max(latest_vo_quality_, 0.05);
-    latest_vo_nis_ = ekf_.update_velocity(velocity, vo_noise_std);
-    last_vo_time_ = get_clock()->now();
-    has_visual_odometry_ = true;
-  }
-
   void handle_visual_odometry_diagnostics(const diagnostic_msgs::msg::DiagnosticArray & msg)
   {
     if (msg.status.empty()) {
       return;
     }
+
+    double quality = latest_vo_quality_;
+    std::array<double, 3> velocity{0.0, 0.0, 0.0};
+    bool has_quality = false;
+    bool has_velocity_x = false;
+    bool has_velocity_y = false;
+    bool has_velocity_z = false;
+
     for (const auto & value : msg.status.front().values) {
-      if (value.key == "quality") {
-        try {
+      try {
+        if (value.key == "quality") {
           latest_vo_quality_ = std::clamp(std::stod(value.value), 0.0, 1.0);
-        } catch (const std::exception &) {
-          latest_vo_quality_ = 0.0;
+          quality = latest_vo_quality_;
+          has_quality = true;
+        } else if (value.key == "velocity_x") {
+          velocity[0] = std::stod(value.value);
+          has_velocity_x = true;
+        } else if (value.key == "velocity_y") {
+          velocity[1] = std::stod(value.value);
+          has_velocity_y = true;
+        } else if (value.key == "velocity_z") {
+          velocity[2] = std::stod(value.value);
+          has_velocity_z = true;
         }
+      } catch (const std::exception &) {
+        latest_vo_quality_ = 0.0;
+        return;
       }
     }
+
+    const bool has_velocity = has_velocity_x && has_velocity_y && has_velocity_z;
+    if (!has_odometry_ || msg.status.front().message != "visual_odometry_active" ||
+      !has_quality || !has_velocity)
+    {
+      return;
+    }
+
+    const double vo_noise_std = base_vo_noise_std_ / std::max(quality, 0.05);
+    latest_vo_nis_ = ekf_.update_velocity(velocity, vo_noise_std);
+    last_vo_time_ = get_clock()->now();
+    has_visual_odometry_ = true;
   }
 
   void publish_score()
@@ -216,7 +224,6 @@ private:
   EkfEstimator ekf_{0.5};
   twinguard::integrity::TrustScorer scorer_;
   rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr odometry_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr vo_sub_;
   rclcpp::Subscription<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr vo_diag_sub_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr trust_pub_;
