@@ -83,6 +83,7 @@ install(
 )
 
 ament_export_include_directories(include)
+ament_export_libraries(twinguard_integrity_core)
 ament_export_targets(export_twinguard_integrity_core HAS_LIBRARY_TARGET)
 
 ament_package()

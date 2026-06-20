@@ -11,7 +11,12 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>twinguard_swarm_integrity</exec_depend>
   <exec_depend>twinguard_swarm_integrity_cpp</exec_depend>
+  <exec_depend>twinguard_swarm_estimation_cpp</exec_depend>
   <exec_depend>twinguard_dataset_replay</exec_depend>
+  <exec_depend>ros_gz_image</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

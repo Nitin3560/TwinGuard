@@ -33,6 +33,34 @@ Current implemented binding:
 /twinguard/replay/vehicle_odometry -> formation_supervisor_node
 /drone_2/twinguard/replay/vehicle_odometry -> integrity_node_cpp
 /drone_2/twinguard/replay/vehicle_odometry -> formation_supervisor_node
+/drone_0/fmu/out/vehicle_odometry -> ekf_integrity_node
+```
+
+## Camera and Visual Odometry
+
+```text
+/drone_0/twinguard/camera/image_raw
+/drone_0/twinguard/camera/depth
+/drone_0/twinguard/visual_odometry
+/drone_0/twinguard/visual_odometry_diagnostics
+```
+
+Expected message families:
+
+```text
+sensor_msgs/msg/Image
+geometry_msgs/msg/TwistStamped
+diagnostic_msgs/msg/DiagnosticArray
+```
+
+Current implemented binding:
+
+```text
+Gazebo x500_depth camera image -> ros_gz_image -> /drone_0/twinguard/camera/image_raw
+Gazebo x500_depth depth image  -> ros_gz_image -> /drone_0/twinguard/camera/depth
+/drone_0/twinguard/camera/image_raw -> visual_odometry_node
+/drone_0/twinguard/camera/depth     -> visual_odometry_node
+/drone_0/twinguard/visual_odometry  -> ekf_integrity_node
 ```
 
 ## Commands To PX4
@@ -84,6 +112,8 @@ Current implemented binding:
 ```text
 /drone_0/twinguard/integrity_diagnostics  <- integrity_node_cpp
 /drone_0/twinguard/trust_state            <- integrity_node_cpp
+/drone_0/twinguard/integrity_diagnostics  <- ekf_integrity_node when launched through twinguard_ekf_integrity.launch.py
+/drone_0/twinguard/trust_state            <- ekf_integrity_node when launched through twinguard_ekf_integrity.launch.py
 /drone_0/twinguard/supervisor_diagnostics <- formation_supervisor_node
 ```
 

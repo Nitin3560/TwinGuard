@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>twinguard_swarm_estimation_cpp</name>
+  <version>0.1.0</version>
+  <description>EKF-based multi-source state estimation and visual odometry for TwinGuard.</description>
+  <maintainer email="nitin@example.com">Nitin</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>px4_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>opencv</depend>
+  <depend>eigen</depend>
+  <depend>twinguard_swarm_integrity_cpp</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
