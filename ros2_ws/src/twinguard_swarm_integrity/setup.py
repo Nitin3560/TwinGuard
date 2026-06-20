@@ -19,7 +19,6 @@ setup(
     entry_points={
         "console_scripts": [
             "integrity_node = twinguard_swarm_integrity.integrity_node:main",
-            "formation_supervisor = twinguard_swarm_integrity.formation_supervisor:main",
             "offboard_mission_controller = twinguard_swarm_integrity.offboard_mission_controller:main",
         ],
     },

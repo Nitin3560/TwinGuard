@@ -84,18 +84,18 @@ The reference experiment uses a multi-UAV formation mission:
 
 ## ROS 2 Integration
 
-Planned nodes and packages:
+Implemented and planned nodes/packages:
 
 - `twinguard_swarm_integrity_cpp`: C++ package for digital-twin integrity scoring, trust, fault labels, and authority scaling.
 - `integrity_node_cpp`: C++ ROS 2 node that subscribes to PX4 `VehicleOdometry`, predicts expected state, and publishes residual/trust diagnostics.
+- `formation_supervisor_node`: C++ ROS 2 node that subscribes to TwinGuard trust/diagnostics and PX4 odometry, then publishes trust-gated `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand` messages.
 - `dataset_replay_node`: Python ROS 2 bridge that applies a real dataset degradation profile to live PX4 odometry for validation and recording.
-- `offboard_mission_controller`: ROS 2 PX4 offboard controller that publishes `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand` messages for repeatable mission flight.
+- `offboard_mission_controller`: Python ROS 2 PX4 offboard controller used for repeatable replay/demo mission flight.
 - `digital_twin_node`: predicts per-UAV expected state.
-- `formation_supervisor`: generates trust-aware formation setpoints.
 - `attack_injector`: injects reproducible sensor/communication faults.
 - `experiment_logger`: records CSV and rosbag2 outputs.
 
-The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The latency-sensitive integrity/scoring path is implemented in C++; Python is reserved for launch-time orchestration, experiment tooling, dataset replay, and mission-control prototyping.
+The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The latency-sensitive integrity/scoring and trust-gated offboard-supervision paths are implemented in C++; Python is reserved for launch-time orchestration, experiment tooling, dataset replay, and mission-control prototyping.
 
 ## Single-UAV PX4 Validation Run
 
@@ -205,7 +205,7 @@ Official references:
 
 ## Implementation Status
 
-This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, real dataset replay bridge, and an initial PX4 offboard mission controller. The current validated path is a single PX4 `gz_x500` vehicle with live odometry, dataset replay, C++ trust scoring, and offboard mission setpoints. The next engineering milestone is to extend the launch stack to multiple PX4 vehicle namespaces and promote the single-vehicle mission controller into a trust-aware swarm formation controller.
+This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, C++ trust-gated formation supervisor, real dataset replay bridge, and an initial PX4 offboard mission controller. The current Phase 1 path closes the loop from PX4 odometry to C++ trust scoring to C++ offboard command publication: nominal trust passes the mission setpoint through, degraded trust scales authority, and suspected attack holds current position. The next engineering milestone is to extend this single-agent supervisor into multi-agent formation geometry and planner-assurance logic.
 
 ## Intended Outcome
 

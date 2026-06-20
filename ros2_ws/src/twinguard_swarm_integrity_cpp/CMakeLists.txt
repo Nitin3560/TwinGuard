@@ -19,6 +19,7 @@ include_directories(include)
 
 add_library(twinguard_integrity_core
   src/trust_scorer.cpp
+  src/offboard_supervisor.cpp
 )
 
 target_include_directories(twinguard_integrity_core PUBLIC
@@ -42,13 +43,29 @@ ament_target_dependencies(integrity_node_cpp
   px4_msgs
 )
 
+add_executable(formation_supervisor_node
+  src/formation_supervisor_node.cpp
+)
+
+target_link_libraries(formation_supervisor_node
+  twinguard_integrity_core
+)
+
+ament_target_dependencies(formation_supervisor_node
+  rclcpp
+  std_msgs
+  geometry_msgs
+  diagnostic_msgs
+  px4_msgs
+)
+
 install(
   DIRECTORY include/
   DESTINATION include
 )
 
 install(
-  TARGETS twinguard_integrity_core integrity_node_cpp
+  TARGETS twinguard_integrity_core integrity_node_cpp formation_supervisor_node
   EXPORT export_twinguard_integrity_core
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
