@@ -1,0 +1,10 @@
+.git
+build
+install
+log
+**/__pycache__
+**/*.pyc
+results/*
+!results/.gitkeep
+experiments/runs/*
+README 2.md

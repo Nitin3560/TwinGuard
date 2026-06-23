@@ -1,0 +1,65 @@
+services:
+  discovery-server:
+    image: osrf/ros:jazzy-desktop
+    container_name: twinguard-discovery
+    command: bash -lc "fastdds discovery --server-id 0 --ip-address 0.0.0.0 --port 11811"
+    networks:
+      - twinguard-net
+
+  px4-sitl:
+    build:
+      context: .
+      dockerfile: docker/px4_sitl/Dockerfile
+    container_name: twinguard-px4-sitl
+    networks:
+      - twinguard-net
+
+  autonomy-core:
+    build:
+      context: .
+      dockerfile: docker/ros2_ws/Dockerfile
+    container_name: twinguard-autonomy-core
+    command: ros2 launch twinguard_swarm_bringup twinguard_ekf_integrity.launch.py
+    environment:
+      ROS_DISCOVERY_SERVER: discovery-server:11811
+      ROS_DOMAIN_ID: "0"
+    depends_on:
+      - discovery-server
+      - px4-sitl
+    networks:
+      - twinguard-net
+
+  nav2-stack:
+    build:
+      context: .
+      dockerfile: docker/ros2_ws/Dockerfile
+    container_name: twinguard-nav2
+    command: ros2 launch nav2_bringup navigation_launch.py params_file:=/workspace/ros2_ws/src/twinguard_swarm_nav2_cpp/params/twinguard_nav2_snippet.yaml
+    environment:
+      ROS_DISCOVERY_SERVER: discovery-server:11811
+      ROS_DOMAIN_ID: "0"
+    depends_on:
+      - discovery-server
+      - autonomy-core
+    networks:
+      - twinguard-net
+
+  experiment-logger:
+    build:
+      context: .
+      dockerfile: docker/ros2_ws/Dockerfile
+    container_name: twinguard-logger
+    command: ros2 bag record -a -o /workspace/results/latest_run
+    environment:
+      ROS_DISCOVERY_SERVER: discovery-server:11811
+      ROS_DOMAIN_ID: "0"
+    depends_on:
+      - discovery-server
+    networks:
+      - twinguard-net
+    volumes:
+      - ./results:/workspace/results
+
+networks:
+  twinguard-net:
+    driver: bridge

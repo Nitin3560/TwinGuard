@@ -15,6 +15,7 @@ The project is designed to support repeatable experiments where a UAV swarm perf
 - Local A* replanning over a coarse static 3D voxel grid for known no-fly volumes
 - Optional EKF-based multi-source estimator fusing PX4 odometry with sparse optical-flow visual odometry
 - Nav2-facing BT condition and costmap layer plugins for trust-aware navigation integration
+- Deployment-oriented Dockerfiles and Fast-DDS discovery-server compose profile
 - Multi-UAV formation supervision
 - Per-agent digital twin prediction
 - Residual and normalized-innovation-based anomaly scoring
@@ -57,11 +58,17 @@ Detailed architecture notes are available in [docs/architecture.md](docs/archite
 TwinGuard-Swarm-Gazebo/
 ├── docs/
 │   ├── architecture.md
+│   ├── deployment.md
 │   ├── engineering_plan.md
 │   ├── environment.md
 │   ├── quickstart.md
 │   ├── real_dataset_replay.md
 │   └── topic_contract.md
+├── docker/
+│   ├── px4_sitl/
+│   └── ros2_ws/
+├── docker-compose.microservices.yaml
+├── docker-compose.yaml
 ├── ros2_ws/
 │   └── src/
 │       ├── twinguard_swarm_bringup/
@@ -114,6 +121,7 @@ Phase 2 adds an explicit Behavior Tree above the offboard supervisor: suspected 
 The local A* planner is intentionally scoped to short-horizon rerouting: with the default 0.5 m cell size and 32-cell extent, it solves roughly 32 m start-to-goal spans per axis around the current query. Larger or unreachable local plans fall back to the nominal branch rather than being claimed as global planning.
 Phase 3 adds an opt-in EKF path through `twinguard_ekf_integrity.launch.py`: launch PX4 with `gz_x500_depth`, bridge Gazebo RGB/depth camera topics into ROS 2, estimate sparse optical-flow velocity using per-feature depth scaling, and fuse that velocity with PX4 odometry in a 6-state EKF. This is visual odometry and trust-aware sensor fusion, not SLAM or mapping.
 Phase 4 adds a narrow Nav2-facing interface through `twinguard_swarm_nav2_cpp`: a BT plugin that gates Nav2 behavior on TwinGuard trust, and a costmap layer that turns low localization integrity into local planning conservatism. Nav2's global planners, local controllers, obstacle layers, and recovery behaviors remain Nav2's own implementations.
+Phase 5 adds deployment realism through `docker/ros2_ws`, `docker/px4_sitl`, and `docker-compose.microservices.yaml`. The microservice profile uses a Fast-DDS discovery server on a Docker bridge network instead of relying on multicast discovery across Docker's default networking. Container boundaries follow subsystem coupling: simulation, autonomy core, Nav2, logging, and discovery.
 
 ## Single-UAV PX4 Validation Run
 
@@ -223,7 +231,7 @@ Official references:
 
 ## Implementation Status
 
-This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, C++ trust-gated formation supervisor, BehaviorTree.CPP mission selection, local A* rerouting, EKF/visual-odometry estimation path, Nav2-facing trust plugins, and real dataset replay bridge. The current default path closes the loop from PX4 odometry to C++ trust scoring to BT-guided setpoint selection to C++ offboard command publication. The opt-in Phase 3 launch swaps in `ekf_integrity_node`, which fuses PX4 position with sparse optical-flow visual-odometry velocity while preserving the same `trust_state` interface. The Phase 4 Nav2 package exposes that same trust contract to Nav2 without replacing Nav2 planners. Trajectory-risk monitoring is stubbed as a no-op `TrajectoryClear` BT condition until a shared multi-agent trajectory-intent topic is added.
+This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, C++ trust-gated formation supervisor, BehaviorTree.CPP mission selection, local A* rerouting, EKF/visual-odometry estimation path, Nav2-facing trust plugins, deployment container scaffolding, and real dataset replay bridge. The current default path closes the loop from PX4 odometry to C++ trust scoring to BT-guided setpoint selection to C++ offboard command publication. The opt-in Phase 3 launch swaps in `ekf_integrity_node`, which fuses PX4 position with sparse optical-flow visual-odometry velocity while preserving the same `trust_state` interface. The Phase 4 Nav2 package exposes that same trust contract to Nav2 without replacing Nav2 planners. Phase 5 provides reproducible Docker artifacts and a Fast-DDS microservice deployment profile, but full `colcon`, SITL, plugin-load, and Jetson validation still need to run on an Ubuntu ROS/Nav2 machine. Trajectory-risk monitoring is stubbed as a no-op `TrajectoryClear` BT condition until a shared multi-agent trajectory-intent topic is added.
 
 ## Intended Outcome
 

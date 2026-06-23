@@ -59,6 +59,8 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
+For a reproducible container build path, see [deployment.md](deployment.md). The deployment Dockerfile consolidates the ROS, PX4 message, BehaviorTree.CPP, Nav2, Eigen, OpenCV, and Gazebo bridge dependencies used by the C++ packages.
+
 ## 5. Launch Initial TwinGuard Nodes
 
 ```bash

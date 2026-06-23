@@ -31,6 +31,24 @@ colcon build --symlink-install
 
 Containerized development is useful for validating ROS 2 package structure, C++ nodes, and Python experiment tooling. Full Gazebo rendering and PX4 SITL workflows are best validated in a native Ubuntu desktop or workstation environment.
 
+## Deployment Containers
+
+The deployment-oriented profile is documented in [deployment.md](deployment.md). It adds:
+
+```text
+docker/ros2_ws/Dockerfile
+docker/px4_sitl/Dockerfile
+docker-compose.microservices.yaml
+```
+
+Unlike the simple development compose file, the microservice profile uses a Docker bridge network and a Fast-DDS discovery server. This preserves container network isolation while avoiding the common ROS 2 failure mode where DDS multicast discovery does not cross Docker's default bridge network.
+
+Use the deployment profile after the native or single-container build path has passed:
+
+```bash
+docker compose -f docker-compose.microservices.yaml up --build
+```
+
 ## Deployment Profiles
 
 ### Local Ubuntu Workstation
