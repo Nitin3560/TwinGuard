@@ -16,9 +16,7 @@ struct Obstacle
 struct GridConfig
 {
   double cell_size_m{0.5};
-  // The grid is centered at the midpoint of each start/goal query. With the
-  // default 32-cell extent and 0.5 m cells, the local planning volume spans
-  // roughly 32 m per axis from start to goal.
+  // Local grid extent around the start/goal midpoint.
   int grid_extent_cells{32};
 };
 

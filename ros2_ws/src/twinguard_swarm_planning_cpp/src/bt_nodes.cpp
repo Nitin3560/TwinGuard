@@ -224,8 +224,7 @@ public:
 
   BT::NodeStatus tick() override
   {
-    // TODO: Replace with cross-agent trajectory-intent checks once supervisors
-    // publish planned path intents on a shared swarm topic.
+    // TODO: Replace with shared trajectory-intent checks.
     return BT::NodeStatus::SUCCESS;
   }
 };

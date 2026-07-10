@@ -102,9 +102,7 @@ def generate_launch_description():
             DeclareLaunchArgument("replay_rate_hz", default_value="20.0"),
             DeclareLaunchArgument("mission_radius_m", default_value="3.0"),
             DeclareLaunchArgument("takeoff_altitude_m", default_value="2.0"),
-            # PX4 multi-vehicle namespaces vary by setup. These defaults match
-            # the common PX4 ROS 2 SITL layout: first vehicle unprefixed, then
-            # px4_1, px4_2 for later instances.
+            # Defaults match the common PX4 multi-vehicle ROS 2 layout.
             DeclareLaunchArgument("drone_0_odometry", default_value="/fmu/out/vehicle_odometry"),
             DeclareLaunchArgument("drone_1_odometry", default_value="/px4_1/fmu/out/vehicle_odometry"),
             DeclareLaunchArgument("drone_2_odometry", default_value="/px4_2/fmu/out/vehicle_odometry"),

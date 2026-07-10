@@ -7,11 +7,7 @@ from std_msgs.msg import Float32
 
 
 class IntegrityNode(Node):
-    """Placeholder ROS2 binding for TwinGuard trust diagnostics.
-
-    The next implementation step is to bind this node to px4_msgs vehicle
-    odometry topics in an Ubuntu/PX4 environment.
-    """
+    """Placeholder ROS2 binding for TwinGuard trust diagnostics."""
 
     def __init__(self) -> None:
         super().__init__("twinguard_integrity_node")

@@ -31,13 +31,7 @@ def _first_existing(row: dict[str, str], keys: list[str], default: float = 0.0) 
 
 
 class DatasetReplayNode(Node):
-    """Injects a real degradation profile into live PX4 odometry.
-
-    The node keeps Gazebo/PX4 as the live 3D source, then uses rows from a real
-    CSV dataset to perturb the odometry sent to TwinGuard. This keeps the video
-    tied to the simulator while validating the integrity layer against a real
-    time-series degradation profile.
-    """
+    """Injects dataset degradation into live PX4 odometry."""
 
     def __init__(self) -> None:
         super().__init__("twinguard_dataset_replay")
