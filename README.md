@@ -16,40 +16,6 @@ The goal is simple: **make localization integrity part of the autonomy pipeline 
 
 ---
 
-# Control Pipeline
-
-Every UAV continuously executes the following loop.
-
-```text
-PX4 VehicleOdometry
-        │
-        ▼
-Digital Twin Prediction
-        │
-        ▼
-Residual Computation
-        │
-        ▼
-Continuous Trust Score
-        │
-        ▼
-Authority Scaling
-        │
-        ├──────────────┐
-        ▼              ▼
-Behavior Tree       Nav2 Plugins
-        │
-        ▼
-Offboard Supervisor
-        │
-        ▼
-PX4 Offboard Commands
-```
-
-Rather than switching between "healthy" and "failed," trust changes continuously. Every subsystem reacts to the same trust estimate, allowing the vehicle to degrade gracefully whenever possible.
-
----
-
 # How It Works
 
 TwinGuard is built around one idea:
@@ -130,7 +96,7 @@ Residuals are converted into a continuous trust score that gradually reduces veh
 
 The objective is to respond proportionally instead of catastrophically.
 
----
+--
 
 ### Mission planning and safety remain independent
 
@@ -142,7 +108,7 @@ The Offboard Supervisor always performs the final authority check before command
 
 Keeping these responsibilities separate makes the control pipeline easier to reason about and prevents mission logic from bypassing integrity constraints.
 
----
+--
 
 ### Lightweight digital twin by design
 
@@ -152,7 +118,7 @@ Rather than using a computationally expensive dynamics model, it propagates the 
 
 The goal is not perfect prediction. The goal is stable residual generation suitable for real-time integrity estimation.
 
----
+--
 
 ### One trust interface across the autonomy stack
 
@@ -170,7 +136,7 @@ The Offboard Supervisor, Behavior Tree, and Nav2 plugins all read this interface
 
 Because of that, the default integrity node and the EKF integrity node can be swapped without changing downstream components.
 
----
+--
 
 ### Nav2 integration is additive
 
@@ -188,7 +154,7 @@ Instead of replaying prerecorded trajectories, TwinGuard injects controlled loca
 
 Dataset error magnitude, quality, and anomaly information are converted into realistic perturbations before entering the integrity pipeline, allowing the remainder of the autonomy stack to operate exactly as it would during normal flight.
 
----
+--
 
 ### Modular deployment
 
