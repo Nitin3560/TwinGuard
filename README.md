@@ -79,7 +79,7 @@ For every control cycle:
 
 # Architecture
 
-![TwinGuard Architecture](docs/images/architecture.png)
+![TwinGuard Architecture](docs/architecture.png)
 
 TwinGuard is organized around one simple idea: estimation, planning, and control remain independent while sharing a common trust interface. The integrity node estimates trust from PX4 odometry, the Behavior Tree selects mission intent, and the Offboard Supervisor applies the final authority gate before commands reach PX4. An optional EKF pipeline can replace the default integrity estimator without changing downstream components because both publish the same trust_state interface.
 
