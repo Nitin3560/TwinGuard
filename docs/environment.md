@@ -1,64 +1,126 @@
-# Development Environment
+# Environment Setup
 
-TwinGuard-Swarm-Gazebo is designed for a Linux robotics development environment with ROS 2, Gazebo, and PX4 SITL.
+This document lists the software, tools, and dependencies required to build and run TwinGuard.
 
-## Recommended Platform
+The project has primarily been developed and tested using Ubuntu, ROS 2 Jazzy, PX4 SITL, and Gazebo Harmonic.
 
-```text
-Ubuntu 22.04 or Ubuntu 24.04
-ROS 2 Humble or Jazzy
-Gazebo / Gazebo Harmonic-compatible PX4 tooling
-PX4-Autopilot
+---
+
+# Operating System
+
+The recommended development environment is:
+
+- Ubuntu 24.04 LTS
+
+Ubuntu 22.04 may also work with compatible ROS 2 and PX4 versions, but Ubuntu 24.04 is the primary target environment.
+
+---
+
+# Required Software
+
+Install the following components before building the workspace.
+
+| Software | Version |
+|----------|---------|
+| ROS 2 | Jazzy |
+| PX4 Autopilot | Stable |
+| Gazebo | Harmonic |
+| Fast DDS | Compatible with ROS 2 Jazzy |
+| Micro XRCE-DDS Agent | Latest |
+| Docker | Latest |
+| Docker Compose | Latest |
+| CMake | 3.22+ |
+| Python | 3.10+ |
+| Git | Latest |
+
+---
+
+# ROS 2 Packages
+
+TwinGuard depends on standard ROS 2 packages together with Nav2 and BehaviorTree.CPP.
+
+Important packages include:
+
+- Nav2
+- BehaviorTree.CPP
+- px4_msgs
+- geometry_msgs
+- nav_msgs
+- sensor_msgs
+- tf2
+- Eigen3
+- OpenCV
+
+Any additional package dependencies are automatically resolved during the workspace build.
+
+---
+
+# Workspace
+
+The repository follows a standard ROS 2 workspace structure.
+
+```
+ros2_ws/
+    src/
 ```
 
-This environment provides the most direct path for PX4 SITL, Gazebo rendering, ROS 2 middleware, and DDS-based PX4 message exchange.
+All TwinGuard packages are located inside the `src` directory.
 
-## Containerized Development
+---
 
-A containerized ROS 2 development environment is provided for package builds and headless checks:
+# Simulation Environment
 
-```bash
-docker compose run --rm ros2-dev
-```
+TwinGuard currently targets:
 
-Inside the container:
+- PX4 SITL
+- Gazebo Harmonic
+- ROS 2 Jazzy
 
-```bash
-source /opt/ros/jazzy/setup.bash
-cd ros2_ws
-colcon build --symlink-install
-```
+The default simulation platform uses the PX4 x500 vehicle model.
 
-Containerized development is useful for validating ROS 2 package structure, C++ nodes, and Python experiment tooling. Full Gazebo rendering and PX4 SITL workflows are best validated in a native Ubuntu desktop or workstation environment.
+---
 
-## Deployment Containers
+# Optional Components
 
-The deployment-oriented profile is documented in [deployment.md](deployment.md). It adds:
+Some features require additional components.
 
-```text
-docker/ros2_ws/Dockerfile
-docker/px4_sitl/Dockerfile
-docker-compose.microservices.yaml
-```
+### EKF Integrity Pipeline
 
-Unlike the simple development compose file, the microservice profile uses a Docker bridge network and a Fast-DDS discovery server. This preserves container network isolation while avoiding the common ROS 2 failure mode where DDS multicast discovery does not cross Docker's default bridge network.
+Requires:
 
-Use the deployment profile after the native or single-container build path has passed:
+- RGB camera
+- Depth camera
+- OpenCV
 
-```bash
-docker compose -f docker-compose.microservices.yaml up --build
-```
+---
 
-## Deployment Profiles
+### Nav2 Integration
 
-### Local Ubuntu Workstation
+Requires:
 
-Best for full simulator development, Gazebo visualization, ROS 2 tooling, and video capture.
+- Nav2
+- TwinGuard Nav2 plugins
 
-### Remote Ubuntu Workstation
+---
 
-Recommended when a local Linux workstation is unavailable. Use SSH for development and remote desktop or streaming for Gazebo visualization.
+### Docker Deployment
 
-### Cloud Ubuntu Instance
+Requires:
 
-Useful for short validation runs, package builds, and headless PX4 SITL experiments. GPU-backed instances are only required for heavier rendering or future Isaac Sim workflows.
+- Docker
+- Docker Compose
+- Fast DDS Discovery Server
+
+---
+
+# Verify Installation
+
+Before building TwinGuard, verify the following:
+
+- ROS 2 is installed and sourced.
+- PX4 SITL launches successfully.
+- Gazebo Harmonic is available.
+- `px4_msgs` builds correctly.
+- Docker is installed (optional for containerized deployment).
+
+Once these components are available, continue with the Quick Start guide.
