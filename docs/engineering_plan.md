@@ -1,145 +1,239 @@
-# Engineering Plan
+# Engineering Decisions
 
-This document defines the implementation roadmap for TwinGuard-Swarm-Gazebo. The objective is to build a reproducible simulation pipeline that connects PX4 SITL, Gazebo, ROS 2, digital-twin prediction, trust-aware integrity monitoring, and formation-level supervision.
+This document is different from the architecture documentation.
 
-## Target Components
+The architecture explains how TwinGuard is organized.
 
-- PX4 SITL autopilot
-- Gazebo simulator
-- ROS 2 nodes and topics
-- px4_msgs message types
-- C++17 integrity scoring module
-- rosbag2 or CSV logging
-- Digital-twin prediction and trust-management logic
+This document explains **why I built it that way**, the trade-offs I made, and the engineering problems I encountered while developing the system.
 
-## Core ROS 2 Nodes
+Many of these decisions changed as the project evolved. Looking back, I think these choices had a much bigger impact on the project than any individual algorithm.
 
-### `formation_supervisor`
+---
 
-Inputs:
+# 1. I Wanted Integrity To Become A Shared Signal
 
-- per-UAV odometry
-- trust scores
-- mission phase
+The first idea I had was actually very simple.
 
-Outputs:
+Instead of asking:
 
-- desired setpoints
-- authority scale per UAV
-- reconfiguration status
+> "Has the UAV failed?"
 
-Responsibilities:
+I wanted to ask:
 
-- Maintain nominal formation geometry.
-- Reduce command authority for low-trust agents.
-- Reassign formation roles after an isolation decision.
+> "How much should the autonomy stack trust the current vehicle state?"
 
-### `digital_twin_node`
+That small change completely influenced the architecture.
 
-Inputs:
+If trust became a continuous quantity instead of a binary decision, every subsystem could react differently.
 
-- vehicle odometry
-- previous setpoint/control
+Planning could become more conservative.
 
-Outputs:
+Control could reduce authority.
 
-- predicted state
-- expected GPS/IMU proxy
+Navigation could avoid risky maneuvers.
 
-Responsibilities:
+Instead of building separate integrity logic into every package, I decided to compute trust once and let every subsystem consume the same estimate.
 
-- Propagate expected per-UAV motion from recent state and command history.
-- Provide a reference state for innovation and residual computation.
+Looking back, I think this became the most important architectural decision in TwinGuard.
 
-### `integrity_node`
+---
 
-Inputs:
+# 2. Why I Didn't Build A Complex Digital Twin
 
-- measured state/sensor proxy
-- digital twin prediction
+One obvious direction would have been creating a sophisticated vehicle dynamics model.
 
-Outputs:
+I deliberately avoided that.
 
-- residual
-- NIS-like normalized innovation
-- trust score
-- fault label
+The objective of the digital twin was never perfect prediction.
 
-Responsibilities:
+Its job was to generate stable residuals.
 
-- Compare measured state against digital-twin prediction.
-- Convert residual statistics into trust and fault labels.
-- Publish integrity diagnostics for the supervisor and logger.
-- Own the latency-sensitive scoring path in C++.
+A lightweight constant-velocity predictor is deterministic, computationally inexpensive, and predictable during debugging.
 
-### `attack_injector`
+That made it a much better engineering choice than introducing additional model complexity that wouldn't significantly improve trust estimation.
 
-Inputs:
+Sometimes simpler really is better.
 
-- clean sensor/state stream
+---
 
-Outputs:
+# 3. Why I Separated Planning From Safety
 
-- corrupted stream for selected UAV/scenario
+This decision came after I started implementing the Behavior Tree.
 
-Scenarios:
+Initially, I considered allowing the planner to publish PX4 commands directly.
 
-- GPS spoofing
-- position drift
-- communication dropout
-- delayed/replay state
+The more I worked on the system, the more uncomfortable I became with that idea.
 
-Responsibilities:
+If planning and safety live inside the same component, it becomes very easy for future changes to accidentally bypass integrity constraints.
 
-- Provide reproducible attacks with seed-controlled timing and magnitude.
-- Preserve clean logs for baseline comparison.
+Instead, I split the responsibilities.
 
-### `logger`
+The Behavior Tree decides what the UAV wants to do.
 
-Outputs:
+The Offboard Supervisor decides whether the UAV is actually allowed to do it.
 
-- CSV logs
-- rosbag2 recording
-- metrics summary
+Every command passes through the supervisor before reaching PX4.
 
-Responsibilities:
+That separation made the entire control pipeline much easier to reason about.
 
-- Record state, trust, attack, and formation data.
-- Generate experiment metrics used by the command-center replay.
+---
 
-## Minimal Experiment Matrix
+# 4. Why Everything Uses trust_state
 
-```text
-nominal
-gps_spoof_drone_3
-comm_dropout_drone_3
-replay_state_drone_3
-combined_gps_comm
+Early versions of the project had multiple pieces of integrity information flowing between packages.
+
+That quickly became difficult to maintain.
+
+Different packages started needing different values.
+
+Instead of creating more interfaces, I replaced them with one shared contract.
+
+```
+trust_state
 ```
 
-Seeds:
+Every subsystem now consumes exactly the same information.
 
-```text
-0 1 2 3 4
-```
+The planner.
 
-Metrics:
+The supervisor.
 
-- swarm RMSE
-- attacked UAV residual
-- trust detection time
-- false alarm rate
-- recovery time
-- connectivity/formation error
-- mission success
+Nav2.
 
-## Milestones
+Future packages.
 
-1. Build ROS 2 packages and launch files.
-2. Validate one PX4 `gz_x500` vehicle publishing `VehicleOdometry` into the C++ integrity node.
-3. Bind additional integrity inputs to PX4 GPS, IMU, and vehicle status topics.
-4. Add deterministic attack injection for GPS spoofing and replay.
-5. Publish trust and fault diagnostics per UAV.
-6. Generate trust-aware formation setpoints.
-7. Record experiment logs and compute metrics.
-8. Generate command-center replay from recorded logs.
+That decision dramatically reduced coupling across the project and made replacing the integrity estimator much easier later.
+
+---
+
+# 5. Why I Didn't Modify Nav2
+
+Nav2 already solves navigation extremely well.
+
+I didn't want TwinGuard to become another navigation framework.
+
+Instead, I asked myself:
+
+> "Can integrity simply become another input to Nav2?"
+
+That led to two plugins.
+
+A Behavior Tree condition.
+
+A localization-aware costmap layer.
+
+Nav2 continues doing what it already does well while automatically considering localization confidence.
+
+This allowed me to extend Nav2 rather than fork it.
+
+---
+
+# 6. Why I Built Dataset Replay
+
+Simulation alone wasn't enough.
+
+Randomly injecting Gaussian noise also wasn't enough.
+
+I wanted repeatable experiments using realistic degradation.
+
+Instead of replaying entire trajectories, I inject controlled localization degradation into live PX4 odometry.
+
+The autonomy stack continues operating normally.
+
+Only the localization quality changes.
+
+That made the experiments both repeatable and representative of real degradation.
+
+---
+
+# 7. Why I Used Docker
+
+As the project grew, running everything inside one ROS workspace became increasingly difficult.
+
+Different components had different responsibilities.
+
+PX4.
+
+Autonomy.
+
+Navigation.
+
+Logging.
+
+They didn't all need to restart together.
+
+Separating them into containers made debugging much easier and naturally pushed the architecture toward cleaner interfaces.
+
+Using a Fast DDS Discovery Server also removed many of the networking issues that appear when ROS 2 relies on multicast inside Docker.
+
+---
+
+# Engineering Challenges
+
+Most of the difficult problems I encountered weren't algorithmic.
+
+They were architectural.
+
+---
+
+## Keeping Components Independent
+
+The biggest challenge was making sure estimation, planning, supervision, and navigation remained independent.
+
+Every time two components started depending on each other, I tried to move that information into a shared interface instead.
+
+That eventually led to the trust_state message becoming the center of the architecture.
+
+---
+
+## Avoiding Tight Coupling
+
+It was tempting to let one node directly call another or expose implementation details.
+
+I intentionally avoided that.
+
+Every package communicates through ROS topics or well-defined interfaces.
+
+That made replacing components much easier later in development.
+
+---
+
+## Balancing Simplicity And Capability
+
+A recurring decision throughout the project was choosing between adding another sophisticated algorithm or keeping the system understandable.
+
+Whenever possible, I preferred simpler implementations with clear responsibilities over complicated solutions that solved multiple problems at once.
+
+I wanted someone reading the code to understand why every component existed.
+
+---
+
+## Designing For Extension
+
+I knew the project would continue growing.
+
+Because of that, I tried to design every major component so it could be replaced independently.
+
+Today the integrity estimator can be swapped.
+
+New planners can be added.
+
+Nav2 can evolve independently.
+
+That flexibility came from spending time on interfaces early instead of adding them later.
+
+---
+
+# Looking Back
+
+The biggest lesson I learned while building TwinGuard is that resilient autonomy is much more about architecture than algorithms.
+
+Digital twins, EKFs, planners, and controllers are all important.
+
+But if they cannot communicate through simple, well-defined interfaces, the system quickly becomes difficult to extend and difficult to trust.
+
+If I started the project again today, I would make many implementation improvements.
+
+I would not change the core architectural decision.
+
+Computing trust once and allowing every subsystem to make decisions from the same integrity estimate is still the design choice I am most confident in.
