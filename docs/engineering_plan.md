@@ -1,239 +1,119 @@
-# Engineering Decisions
+# Design Doc
 
-This document is different from the architecture documentation.
+This document explains the reasoning behind the architectural decisions I made while building TwinGuard. The architecture document describes how the system is organized, but that only tells half of the story. What I found much more interesting while working on this project was understanding *why* the architecture gradually evolved into its current form. Almost every major component changed at least once before settling into the design that exists today, and most of those changes happened because I encountered practical engineering problems rather than algorithmic ones.
 
-The architecture explains how TwinGuard is organized.
-
-This document explains **why I built it that way**, the trade-offs I made, and the engineering problems I encountered while developing the system.
-
-Many of these decisions changed as the project evolved. Looking back, I think these choices had a much bigger impact on the project than any individual algorithm.
+When I started this project, I wasn't trying to build another PX4 simulation or another ROS 2 autonomy stack. My objective was to explore how localization integrity could become part of the decision-making process instead of remaining an isolated monitoring component. That single idea eventually influenced almost every architectural decision in the project. Looking back, I think the success of TwinGuard comes much more from the way the system is organized than from any individual algorithm inside it.
 
 ---
 
-# 1. I Wanted Integrity To Become A Shared Signal
+# Why I Made Integrity a Shared Signal
 
-The first idea I had was actually very simple.
+The first design decision I made was also the one that influenced the rest of the architecture the most. While looking at existing autonomy pipelines, I noticed that every subsystem simply assumed the localization estimate was correct. The planner trusted it, the controller trusted it, and the navigation stack trusted it as well. If localization quality degraded, every component either continued operating on unreliable information or reacted independently in different ways.
 
-Instead of asking:
+I wanted the entire autonomy stack to share one understanding of localization quality. Instead of asking whether the UAV had "failed," I wanted every subsystem to continuously know how trustworthy the current vehicle state was. That immediately ruled out a binary fault detector. A simple healthy-or-failed decision would force every downstream component to react in exactly the same way, which wasn't what I wanted. Some situations only require reducing vehicle authority, while others justify replanning or holding position. Those decisions become much easier when integrity is represented as a continuously varying quantity instead of a Boolean state.
 
-> "Has the UAV failed?"
+That led me to designing a shared trust interface. Rather than allowing every package to estimate confidence independently, the integrity pipeline computes trust once and publishes it through a single topic. Planning, supervision, and navigation all consume exactly the same information. Besides making the architecture easier to understand, this decision dramatically reduced coupling between packages because integrity became a service that every component could use instead of something every component had to implement.
 
-I wanted to ask:
-
-> "How much should the autonomy stack trust the current vehicle state?"
-
-That small change completely influenced the architecture.
-
-If trust became a continuous quantity instead of a binary decision, every subsystem could react differently.
-
-Planning could become more conservative.
-
-Control could reduce authority.
-
-Navigation could avoid risky maneuvers.
-
-Instead of building separate integrity logic into every package, I decided to compute trust once and let every subsystem consume the same estimate.
-
-Looking back, I think this became the most important architectural decision in TwinGuard.
+Looking back, this is probably the architectural decision I am happiest with because almost every extension I added later—the EKF pipeline, Nav2 integration, and dataset replay—benefited from keeping that interface stable.
 
 ---
 
-# 2. Why I Didn't Build A Complex Digital Twin
+# Why I Chose a Lightweight Digital Twin
 
-One obvious direction would have been creating a sophisticated vehicle dynamics model.
+One of the earliest questions I asked myself was how sophisticated the digital twin actually needed to be. It would have been easy to spend a large amount of time building a more detailed vehicle dynamics model, but the more I thought about the problem, the more I realized that perfect prediction was never the objective.
 
-I deliberately avoided that.
+The digital twin exists for one purpose: producing meaningful residuals. As long as the prediction remains stable and deterministic, those residuals become a reliable indicator of localization quality. Increasing the complexity of the prediction model would certainly improve accuracy in some situations, but it would also introduce additional computational cost, more tuning parameters, and a system that would become harder to debug. None of those trade-offs significantly improved the integrity estimation itself.
 
-The objective of the digital twin was never perfect prediction.
-
-Its job was to generate stable residuals.
-
-A lightweight constant-velocity predictor is deterministic, computationally inexpensive, and predictable during debugging.
-
-That made it a much better engineering choice than introducing additional model complexity that wouldn't significantly improve trust estimation.
-
-Sometimes simpler really is better.
+I eventually settled on a lightweight constant-velocity predictor because it remained computationally inexpensive while generating consistent residuals in real time. The implementation became easier to understand, easier to validate, and easier to extend without sacrificing the actual purpose of the integrity pipeline. Throughout this project I found myself making similar decisions repeatedly—choosing simpler components with clearly defined responsibilities instead of pursuing maximum algorithmic complexity.
 
 ---
 
-# 3. Why I Separated Planning From Safety
+# Why I Separated Planning From Safety
 
-This decision came after I started implementing the Behavior Tree.
+This decision emerged naturally as I started implementing the Behavior Tree. At first, it seemed reasonable to let the planner publish commands directly to PX4. After all, the planner already knew where the UAV should fly, so allowing it to generate the final command looked like the simplest architecture.
 
-Initially, I considered allowing the planner to publish PX4 commands directly.
+The longer I worked on the system, the less comfortable I became with that approach. If the planner was responsible for both deciding the mission and enforcing safety, then future changes to planning logic could accidentally bypass integrity constraints. Safety would become tightly coupled to mission execution, making the architecture much harder to reason about.
 
-The more I worked on the system, the more uncomfortable I became with that idea.
+Instead, I deliberately separated those responsibilities. The Behavior Tree decides what the UAV should attempt to do, whether that means continuing the nominal mission, performing a local reroute, or holding position. Those decisions never reach PX4 directly. Every candidate command must first pass through the Offboard Supervisor, which evaluates the current authority scale before publishing anything to the flight controller.
 
-If planning and safety live inside the same component, it becomes very easy for future changes to accidentally bypass integrity constraints.
-
-Instead, I split the responsibilities.
-
-The Behavior Tree decides what the UAV wants to do.
-
-The Offboard Supervisor decides whether the UAV is actually allowed to do it.
-
-Every command passes through the supervisor before reaching PX4.
-
-That separation made the entire control pipeline much easier to reason about.
+This extra layer initially felt unnecessary because it introduced another component into the runtime. After the project grew, however, it became one of the cleanest parts of the architecture. Mission planning remained focused entirely on behavior, while safety enforcement became centralized inside one location. That separation also made debugging significantly easier because I always knew where authority decisions were being made.
 
 ---
 
-# 4. Why Everything Uses trust_state
+# Why Everything Uses `trust_state`
 
-Early versions of the project had multiple pieces of integrity information flowing between packages.
+As more packages were added, I started noticing another problem. Different components wanted different pieces of integrity information. Some needed the trust score, others needed the residual, and others only cared about authority scaling. My first instinct was to expose multiple topics so each package could subscribe only to what it required.
 
-That quickly became difficult to maintain.
+That approach quickly became difficult to maintain. Every new feature introduced another interface, and every interface increased coupling between packages. Instead of simplifying the architecture, I was slowly making it more fragmented.
 
-Different packages started needing different values.
+I decided to replace those interfaces with a single shared contract: `trust_state`. Rather than representing one specific algorithm, the message represents the outcome of the integrity pipeline. Every package consumes the same interface regardless of how the integrity estimate was generated. This turned out to be much more powerful than I originally expected because it allowed me to replace the default integrity node with the EKF implementation without changing the planner, the supervisor, or the Nav2 plugins.
 
-Instead of creating more interfaces, I replaced them with one shared contract.
+This decision reinforced an important lesson for me. Stable interfaces are often more valuable than sophisticated algorithms. Once the interface became fixed, the rest of the architecture became significantly easier to evolve because improvements inside the integrity estimator no longer propagated throughout the entire project.
 
-```
-trust_state
-```
+# Why I Designed the EKF as a Drop-In Replacement
 
-Every subsystem now consumes exactly the same information.
+After the default integrity pipeline was working, I started exploring whether additional sensing could improve localization confidence. The obvious solution would have been replacing the original integrity node entirely, but that would have forced every downstream component to change as well. The more I thought about it, the more I realized that would defeat the purpose of keeping the architecture modular.
 
-The planner.
+Instead, I treated the EKF as another integrity estimator rather than a replacement for the architecture itself. The EKF combines PX4 position estimates with sparse optical-flow visual odometry and depth-scaled motion estimates to produce a more robust estimate of vehicle state. More importantly, it publishes exactly the same `trust_state` interface as the default integrity node. From the perspective of the planner, the supervisor, and Nav2, nothing changes. They simply consume a trust estimate without needing to know how that estimate was produced.
 
-The supervisor.
-
-Nav2.
-
-Future packages.
-
-That decision dramatically reduced coupling across the project and made replacing the integrity estimator much easier later.
+This ended up validating one of the original design goals of the project. By separating interfaces from implementations, I could improve the estimation pipeline without forcing changes throughout the rest of the autonomy stack.
 
 ---
 
-# 5. Why I Didn't Modify Nav2
+# Why I Integrated Nav2 Instead of Replacing It
 
-Nav2 already solves navigation extremely well.
+When I began thinking about navigation, I never wanted TwinGuard to become another navigation framework. Nav2 already provides mature planners, controllers, and recovery behaviors, and trying to replace that ecosystem would have added a huge amount of unnecessary work while solving a problem that had already been solved well.
 
-I didn't want TwinGuard to become another navigation framework.
+Instead, I asked a much simpler question: *Can localization integrity become another input that Nav2 understands?*
 
-Instead, I asked myself:
+That question led to two lightweight integrations. The first is a custom Behavior Tree condition that allows navigation logic to react to localization confidence. The second is a localization-aware costmap layer that represents uncertainty around the robot's own estimated position instead of external obstacles. As localization confidence decreases, the navigation stack naturally becomes more conservative without requiring any modifications to Nav2's existing planners or controllers.
 
-> "Can integrity simply become another input to Nav2?"
-
-That led to two plugins.
-
-A Behavior Tree condition.
-
-A localization-aware costmap layer.
-
-Nav2 continues doing what it already does well while automatically considering localization confidence.
-
-This allowed me to extend Nav2 rather than fork it.
+Looking back, I think extending mature software instead of replacing it was one of the better engineering decisions I made. It allowed TwinGuard to remain focused on integrity while letting Nav2 continue doing what it already does extremely well.
 
 ---
 
-# 6. Why I Built Dataset Replay
+# Why I Built the Dataset Replay Pipeline
 
-Simulation alone wasn't enough.
+Once the integrity pipeline was functioning correctly in simulation, I started thinking about validation. Injecting random Gaussian noise into localization was easy, but it didn't represent how localization actually degrades in the real world. I wanted experiments that were repeatable while still reflecting realistic sensing conditions.
 
-Randomly injecting Gaussian noise also wasn't enough.
+Instead of replaying complete trajectories, I decided to replay localization degradation itself. The replay node injects controlled perturbations into live PX4 odometry using measurements derived from real datasets, allowing the rest of the autonomy stack to continue operating normally. From the perspective of the integrity pipeline, the vehicle behaves exactly like a live system experiencing degraded localization, while every experiment remains deterministic and repeatable.
 
-I wanted repeatable experiments using realistic degradation.
-
-Instead of replaying entire trajectories, I inject controlled localization degradation into live PX4 odometry.
-
-The autonomy stack continues operating normally.
-
-Only the localization quality changes.
-
-That made the experiments both repeatable and representative of real degradation.
+This turned out to be much more valuable than simply adding random disturbances because I could evaluate exactly how trust, authority scaling, and mission supervision behaved under known degradation profiles.
 
 ---
 
-# 7. Why I Used Docker
+# Why I Moved to a Microservice Deployment
 
-As the project grew, running everything inside one ROS workspace became increasingly difficult.
+When TwinGuard was still small, running everything inside a single ROS 2 workspace worked well enough. As the project grew, that approach became increasingly difficult to manage. PX4, the autonomy runtime, Nav2, and experiment logging all had different responsibilities, yet restarting one component often meant restarting unrelated parts of the system. Debugging also became more complicated because every service shared the same execution environment.
 
-Different components had different responsibilities.
+I eventually separated the project into independent runtime services connected through a Fast DDS Discovery Server. PX4, the TwinGuard runtime, Nav2, and experiment logging each run independently while communicating through ROS 2. Besides making development significantly easier, this architecture mirrors how larger robotics systems are commonly deployed and makes future distributed deployments much more practical.
 
-PX4.
-
-Autonomy.
-
-Navigation.
-
-Logging.
-
-They didn't all need to restart together.
-
-Separating them into containers made debugging much easier and naturally pushed the architecture toward cleaner interfaces.
-
-Using a Fast DDS Discovery Server also removed many of the networking issues that appear when ROS 2 relies on multicast inside Docker.
+The biggest lesson from this change was that deployment architecture influences software architecture much more than I originally expected. Once components became independent services, their interfaces naturally became cleaner and much easier to maintain.
 
 ---
 
 # Engineering Challenges
 
-Most of the difficult problems I encountered weren't algorithmic.
+Most of the difficult problems I encountered while building TwinGuard were not algorithmic. They were architectural. Writing another planner or another estimator was relatively straightforward compared to deciding how those components should communicate without becoming tightly coupled.
 
-They were architectural.
+One challenge I repeatedly encountered was deciding where responsibilities should live. Every time a component started accumulating too many responsibilities, I asked myself whether that logic really belonged there or whether it should be moved behind a shared interface. That thought process is ultimately what led to separating estimation, planning, supervision, and navigation into independent subsystems connected through `trust_state`.
 
----
+Another challenge was resisting the temptation to make components aware of each other's implementation details. It is very easy in ROS 2 to let one node become dependent on another because the information is readily available. I intentionally tried to avoid that wherever possible. Every package communicates through ROS topics or clearly defined interfaces, allowing individual components to evolve independently. This approach required more design effort initially, but it paid off later whenever I replaced or extended parts of the system without affecting the rest of the architecture.
 
-## Keeping Components Independent
-
-The biggest challenge was making sure estimation, planning, supervision, and navigation remained independent.
-
-Every time two components started depending on each other, I tried to move that information into a shared interface instead.
-
-That eventually led to the trust_state message becoming the center of the architecture.
-
----
-
-## Avoiding Tight Coupling
-
-It was tempting to let one node directly call another or expose implementation details.
-
-I intentionally avoided that.
-
-Every package communicates through ROS topics or well-defined interfaces.
-
-That made replacing components much easier later in development.
-
----
-
-## Balancing Simplicity And Capability
-
-A recurring decision throughout the project was choosing between adding another sophisticated algorithm or keeping the system understandable.
-
-Whenever possible, I preferred simpler implementations with clear responsibilities over complicated solutions that solved multiple problems at once.
-
-I wanted someone reading the code to understand why every component existed.
-
----
-
-## Designing For Extension
-
-I knew the project would continue growing.
-
-Because of that, I tried to design every major component so it could be replaced independently.
-
-Today the integrity estimator can be swapped.
-
-New planners can be added.
-
-Nav2 can evolve independently.
-
-That flexibility came from spending time on interfaces early instead of adding them later.
-
----
+Balancing simplicity with capability was another recurring decision throughout the project. Many problems could have been solved by introducing more sophisticated algorithms, but that often came at the cost of making the system harder to understand and maintain. Whenever possible, I preferred simpler solutions with clearly defined responsibilities over more complex implementations that solved several problems at once. I wanted someone reading the repository to understand why every major component existed before worrying about the details of how it worked.
 
 # Looking Back
 
-The biggest lesson I learned while building TwinGuard is that resilient autonomy is much more about architecture than algorithms.
+When I started TwinGuard, I thought the most difficult part of the project would be implementing the algorithms. I expected the digital twin, the EKF, and the planning logic to consume most of my time. While those components certainly required effort, I eventually realized that the real challenge was designing an architecture where those algorithms could work together without becoming tightly coupled.
 
-Digital twins, EKFs, planners, and controllers are all important.
+The project taught me that good interfaces are often more valuable than sophisticated implementations. A better digital twin or a more advanced planner can always be added later, but if the architecture depends on every component knowing how every other component works, the project quickly becomes difficult to extend. Once I committed to computing trust once and exposing it through a single interface, many of the later design decisions became much easier. The EKF could replace the default estimator, Nav2 could consume localization confidence, and new components could be introduced without rewriting the rest of the autonomy stack.
 
-But if they cannot communicate through simple, well-defined interfaces, the system quickly becomes difficult to extend and difficult to trust.
+Another lesson I learned was the importance of separating responsibilities. It was tempting in several places to let one component solve multiple problems simply because it already had access to the required information. The Behavior Tree could have published PX4 commands directly, the planner could have estimated integrity, or the integrity node could have contained supervision logic. Each of those approaches would probably have reduced the amount of code in the short term, but they would also have made the architecture much harder to understand and maintain. Keeping each subsystem focused on one responsibility required more discipline, but I think it produced a cleaner design in the long run.
 
-If I started the project again today, I would make many implementation improvements.
+I also gained a much greater appreciation for validation. Building an algorithm is only one part of an autonomy project. Understanding how it behaves under controlled, repeatable conditions is equally important. That realization led me to build the dataset replay pipeline instead of relying only on synthetic disturbances. Being able to reproduce the same degradation profile repeatedly made debugging easier and gave me much more confidence in the behavior of the trust pipeline.
 
-I would not change the core architectural decision.
+Looking back at the repository today, there are still several things I would like to improve. Multi-agent trajectory conflict monitoring is still incomplete, additional validation on physical hardware would strengthen the project, and there is plenty of room to explore more advanced estimation techniques. Those improvements, however, feel like extensions of the architecture rather than changes to it. The core design has remained stable because most of the important architectural decisions were made early and have continued to support new functionality without requiring major redesign.
 
-Computing trust once and allowing every subsystem to make decisions from the same integrity estimate is still the design choice I am most confident in.
+If I were starting TwinGuard again today, I would certainly write cleaner code in several places and make different implementation choices based on what I have learned. I would not change the overall architecture. Computing localization integrity once, treating trust as a continuous quantity instead of a binary decision, and keeping estimation, planning, supervision, and navigation independent while connecting them through a shared interface are still the decisions I am most confident in.
+
+Ultimately, I think the biggest lesson from this project is that resilient autonomy is not just about detecting failures. It is about designing systems that know how to respond when confidence begins to change. The algorithms inside TwinGuard are important, but I believe the architecture is what makes those algorithms practical, maintainable, and extensible. More than anything else, that is the idea I hope this project communicates.
