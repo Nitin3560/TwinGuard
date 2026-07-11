@@ -1,238 +1,206 @@
-# TwinGuard-Swarm-Gazebo
+# TwinGuard
 
-**Digital Twin-Assisted Resilient UAV Swarm Autonomy with ROS 2, Gazebo, and PX4 SITL**
+> **Autonomy assurance for UAV swarms — trust-gated control, behavior-tree supervision, and Nav2 integration built on ROS 2, PX4 SITL, and Gazebo.**
 
-TwinGuard-Swarm-Gazebo is a simulation and autonomy framework for evaluating resilient UAV swarm coordination under sensor degradation and adversarial attacks. The system combines PX4 software-in-the-loop flight dynamics, Gazebo-based simulation, ROS 2 middleware, digital-twin state prediction, trust-aware integrity monitoring, and formation-level supervisory control.
+---
 
-The project is designed to support repeatable experiments where a UAV swarm performs a coordinated mission while one or more agents experience GPS spoofing, communication degradation, delayed state replay, or sensing faults. TwinGuard estimates per-agent integrity, reduces authority for compromised agents, and reconfigures the formation to preserve mission-level performance.
+Most autonomous UAV systems assume their localization is trustworthy. When GPS is spoofed, communication quality drops, or sensor measurements become unreliable, the planner and controller continue operating on corrupted state estimates. The result is often unstable behavior, poor decisions, or complete mission failure.
 
-## Key Capabilities
+**TwinGuard** was built to make **navigation integrity a first-class signal** throughout the autonomy stack.
 
-- PX4 SITL multicopter simulation in Gazebo
-- ROS 2 integration for state, command, diagnostics, and logging
-- C++ integrity scoring and trust-management core
-- BehaviorTree.CPP mission supervision for hold, reroute, and nominal flight branches
-- Local A* replanning over a coarse static 3D voxel grid for known no-fly volumes
-- Optional EKF-based multi-source estimator fusing PX4 odometry with sparse optical-flow visual odometry
-- Nav2-facing BT condition and costmap layer plugins for trust-aware navigation integration
-- Deployment-oriented Dockerfiles and Fast-DDS discovery-server compose profile
-- Multi-UAV formation supervision
-- Per-agent digital twin prediction
-- Residual and normalized-innovation-based anomaly scoring
-- Stateful trust management and authority scaling
-- GPS spoofing, communication dropout, and replay-attack scenarios
-- Experiment logging for RMSE, recovery time, trust, residuals, and mission success
-- Command-center replay generated from experiment logs
-- Real dataset replay into live PX4/Gazebo odometry for video-recordable validation
+Instead of treating failures as a binary event, TwinGuard continuously estimates how trustworthy each UAV's state is, converts that estimate into a smooth authority score, and shares it with every major autonomy component. Planning, supervision, and control all make decisions using the same trust information, allowing the vehicle to slow down, reroute, or hold position before localization errors become dangerous.
 
-## System Architecture
+The goal is not simply to detect faults—it is to keep autonomous systems operating safely while localization quality changes over time.
 
-```text
-PX4 SITL + Gazebo
-        |
-        v
-ROS 2 / PX4 Bridge
-        |
-        +--> Vehicle odometry
-        +--> GPS / IMU / status streams
-        +--> Offboard setpoint commands
-        |
-        v
-TwinGuard Autonomy Layer
-        |
-        +--> Digital Twin Predictor
-        +--> Integrity Engine
-        +--> Trust Manager
-        +--> Attack Injector
-        +--> Formation Supervisor
-        |
-        v
-Experiment Logs + Command-Center Replay
-```
+---
 
-Detailed architecture notes are available in [docs/architecture.md](docs/architecture.md).
+# How It Works
 
-## Repository Layout
+Every UAV runs the following pipeline continuously:
+
+1. **PX4 publishes live vehicle odometry**
+2. A lightweight **digital twin predictor** estimates the expected vehicle state.
+3. The measured state is compared against that prediction to compute a residual.
+4. The residual is converted into a continuous **trust score** and **authority scale**.
+5. The **Behavior Tree** selects the most appropriate mission objective.
+6. The **Offboard Supervisor** always performs the final safety check before publishing commands to PX4.
+7. The same trust information is simultaneously available to **Nav2**, allowing navigation behavior to adapt without modifying the Nav2 stack itself.
+
+Unlike many fault-detection systems, TwinGuard does not immediately switch between "healthy" and "failed." Instead, trust degrades gradually, allowing the vehicle to respond proportionally whenever possible.
+
+---
+
+# Architecture
+
+> *(Replace this section with your final architecture diagram once exported.)*
 
 ```text
-TwinGuard-Swarm-Gazebo/
-├── docs/
-│   ├── architecture.md
-│   ├── deployment.md
-│   ├── engineering_plan.md
-│   ├── environment.md
-│   ├── quickstart.md
-│   ├── real_dataset_replay.md
-│   └── topic_contract.md
-├── docker/
-│   ├── px4_sitl/
-│   └── ros2_ws/
-├── docker-compose.microservices.yaml
-├── docker-compose.yaml
-├── ros2_ws/
-│   └── src/
-│       ├── twinguard_swarm_bringup/
-│       ├── twinguard_dataset_replay/
-│       ├── twinguard_swarm_estimation_cpp/
-│       ├── twinguard_swarm_nav2_cpp/
-│       ├── twinguard_swarm_planning_cpp/
-│       ├── twinguard_swarm_integrity_cpp/
-│       └── twinguard_swarm_integrity/
-├── experiments/
-├── visualization/
-└── results/
+                 PX4 SITL + Gazebo
+                         │
+                         ▼
+                ROS 2 / PX4 Bridge
+                         │
+        ┌─────────────────────────────────────┐
+        │                                     │
+        │        TwinGuard Core               │
+        │                                     │
+        │ integrity_node_cpp                  │
+        │  ├── DigitalTwinPredictor           │
+        │  ├── Residual Computation           │
+        │  └── TrustScorer                    │
+        │             │                       │
+        │             ▼                       │
+        │         trust_state                 │
+        │                                     │
+        │ formation_supervisor_node           │
+        │  ├── BehaviorTree.CPP               │
+        │  │     attack_hold                  │
+        │  │     A* reroute                   │
+        │  │     nominal mission              │
+        │  │                                  │
+        │  └── OffboardSupervisor             │
+        │        Authority Gate               │
+        └─────────────┬───────────────┬───────┘
+                      │               │
+                      ▼               ▼
+             PX4 Offboard        Nav2 Plugins
+               Commands
 ```
 
-## Target Experiment
+The architecture intentionally separates **decision making** from **command execution**.
 
-The reference experiment uses a multi-UAV formation mission:
+The Behavior Tree decides **what the UAV should try to do**, while the Offboard Supervisor decides **whether that command should actually be allowed based on current integrity**.
 
-1. Spawn a PX4/Gazebo multicopter swarm.
-2. Fly a nominal formation trajectory.
-3. Inject GPS spoofing or communication degradation into a selected UAV.
-4. Predict expected state using a per-agent digital twin.
-5. Compute residuals and trust scores.
-6. Reduce authority of the compromised UAV.
-7. Reconfigure the formation.
-8. Report tracking RMSE, detection time, recovery time, and mission success.
+This keeps mission logic independent from safety logic and ensures that authority limiting is always the final step before PX4 receives a command.
 
-## ROS 2 Integration
+---
 
-Implemented and planned nodes/packages:
+## Trust Pipeline
 
-- `twinguard_swarm_integrity_cpp`: C++ package for digital-twin integrity scoring, trust, fault labels, and authority scaling.
-- `integrity_node_cpp`: C++ ROS 2 node that subscribes to PX4 `VehicleOdometry`, predicts expected state, and publishes residual/trust diagnostics.
-- `formation_supervisor_node`: C++ ROS 2 node that subscribes to TwinGuard trust/diagnostics and PX4 odometry, generates static-hold or circular mission setpoints, then publishes trust-gated `OffboardControlMode`, `TrajectorySetpoint`, and `VehicleCommand` messages.
-- `twinguard_swarm_estimation_cpp`: C++ package with a 6-state EKF, sparse optical-flow visual odometry, and an opt-in EKF integrity node.
-- `ekf_integrity_node`: alternative integrity node that fuses PX4 position updates and quality-scored visual-odometry velocity updates, then publishes the same `trust_state` contract consumed by the supervisor.
-- `visual_odometry_node`: converts bridged Gazebo camera/depth images into per-feature-depth-scaled optical-flow velocity estimates plus atomic quality/velocity diagnostics.
-- `twinguard_swarm_nav2_cpp`: Nav2-facing plugin package with a BT condition node and a costmap layer that consume TwinGuard trust.
-- `IsAgentTrustworthy`: Nav2 BT condition plugin that fails closed unless `authority_scale` from `trust_state` is above the configured threshold.
-- `TwinGuardIntegrityLayer`: Nav2 costmap layer plugin that encodes localization self-trust as planning conservatism around the robot's own position, distinct from obstacle or sensor layers.
-- `twinguard_swarm_planning_cpp`: C++ package with BehaviorTree.CPP leaves and a pure A* local planner for static obstacle/no-fly-volume rerouting.
-- `dataset_replay_node`: Python ROS 2 bridge that applies a real dataset degradation profile to live PX4 odometry for validation and recording.
-- `digital_twin_node`: predicts per-UAV expected state.
-- `attack_injector`: injects reproducible sensor/communication faults.
-- `experiment_logger`: records CSV and rosbag2 outputs.
-
-The ROS 2 package skeleton is located under [ros2_ws/src](ros2_ws/src). The latency-sensitive integrity/scoring and trust-gated offboard-supervision paths are implemented in C++; Python is reserved for launch-time orchestration, experiment tooling, dataset replay, and mission-control prototyping.
-A single trust-gated supervisor (`formation_supervisor_node`) handles both static-hold and circular-mission modes, validated against both live PX4 SITL odometry and real-dataset-replay-perturbed odometry.
-Phase 2 adds an explicit Behavior Tree above the offboard supervisor: suspected attacks publish a hold setpoint, blocked straight-line paths invoke A* rerouting around configured static obstacles, and otherwise the nominal mission setpoint is used. The final `OffboardSupervisor::step()` authority gate still decides whether to pass through, slow down, or hard-hold.
-The local A* planner is intentionally scoped to short-horizon rerouting: with the default 0.5 m cell size and 32-cell extent, it solves roughly 32 m start-to-goal spans per axis around the current query. Larger or unreachable local plans fall back to the nominal branch rather than being claimed as global planning.
-Phase 3 adds an opt-in EKF path through `twinguard_ekf_integrity.launch.py`: launch PX4 with `gz_x500_depth`, bridge Gazebo RGB/depth camera topics into ROS 2, estimate sparse optical-flow velocity using per-feature depth scaling, and fuse that velocity with PX4 odometry in a 6-state EKF. This is visual odometry and trust-aware sensor fusion, not SLAM or mapping.
-Phase 4 adds a narrow Nav2-facing interface through `twinguard_swarm_nav2_cpp`: a BT plugin that gates Nav2 behavior on TwinGuard trust, and a costmap layer that turns low localization integrity into local planning conservatism. Nav2's global planners, local controllers, obstacle layers, and recovery behaviors remain Nav2's own implementations.
-Phase 5 adds deployment realism through `docker/ros2_ws`, `docker/px4_sitl`, and `docker-compose.microservices.yaml`. The microservice profile uses a Fast-DDS discovery server on a Docker bridge network instead of relying on multicast discovery across Docker's default networking. Container boundaries follow subsystem coupling: simulation, autonomy core, Nav2, logging, and discovery.
-
-## Single-UAV PX4 Validation Run
-
-The current live validation path runs one PX4 `gz_x500` vehicle, replays a real failure/degradation dataset into the odometry stream, scores the perturbed state with the C++ TwinGuard integrity node, and flies a repeatable offboard mission in Gazebo.
-
-Terminal 1:
-
-```bash
-cd ~/PX4-Autopilot
-make px4_sitl gz_x500
-```
-
-Terminal 2:
-
-```bash
-cd ~/Micro-XRCE-DDS-Agent/build
-MicroXRCEAgent udp4 -p 8888
-```
-
-Terminal 3:
-
-```bash
-cd ~/px4_ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 launch twinguard_swarm_bringup twinguard_single_uav_replay_mission.launch.py \
-  dataset_csv:=/home/nitin/scenario23_seq20_real_channel_timeseries.csv \
-  error_scale:=0.1 \
-  max_offset_m:=3.0 \
-  mission_radius_m:=3.0 \
-  takeoff_altitude_m:=2.0
-```
-
-The real dataset is used as a replayed degradation profile for sensor/integrity validation. It does not replace the PX4 flight controller or directly define the UAV path. The C++ `formation_supervisor_node` owns both the circular mission trajectory and the integrity-aware command response.
-
-## Three-UAV Formation Validation Run
-
-The next validation target is a lightweight swarm run with three PX4 `x500` vehicles:
+TwinGuard publishes one shared message that represents the health of the vehicle.
 
 ```text
-Drone 0: nominal leader-style mission controller
-Drone 1: nominal formation follower
-Drone 2: dataset-degraded UAV with TwinGuard replay/integrity scoring
+geometry_msgs/PointStamped  (trust_state)
+
+point.x  → trust score
+point.y  → residual
+point.z  → authority scale
 ```
 
-The formation uses three synchronized C++ formation supervisors with fixed spatial offsets. Drone 2 receives the real dataset replay on its integrity path so the video shows a visible swarm mission while the diagnostics show degradation, residual growth, and trust response for the affected vehicle.
+Every major subsystem reads the exact same topic:
 
-Start a three-vehicle PX4/Gazebo run using the multi-vehicle launch method supported by your PX4 checkout. Then confirm the generated ROS 2 odometry topics:
+- Offboard Supervisor
+- Behavior Tree
+- Nav2 Behavior Tree plugin
+- Nav2 Costmap Layer
 
-```bash
-ros2 topic list | grep vehicle_odometry
-```
+Because every component consumes the same interface, new autonomy modules can subscribe to trust information without changing the integrity pipeline itself.
 
-The default launch arguments expect the common PX4 ROS 2 topic layout:
+---
 
-```text
-/fmu/out/vehicle_odometry
-/px4_1/fmu/out/vehicle_odometry
-/px4_2/fmu/out/vehicle_odometry
-```
+## Optional EKF Integrity Pipeline
 
-Launch the TwinGuard formation mission:
+The default integrity node uses a lightweight constant-velocity digital twin to generate prediction residuals.
 
-```bash
-cd ~/px4_ros2_ws
-source /opt/ros/humble/setup.bash
-source install/setup.bash
+For higher-fidelity estimation, TwinGuard also includes an optional EKF pipeline that fuses:
 
-ros2 launch twinguard_swarm_bringup twinguard_three_uav_replay_mission.launch.py \
-  dataset_csv:=/home/nitin/scenario23_seq20_real_channel_timeseries.csv
-```
+- PX4 position odometry
+- Sparse optical-flow visual odometry
+- Depth-scaled motion estimates
 
-If your PX4 topics use different prefixes, override them explicitly:
+The visual odometry implementation tracks image features using sparse optical flow and estimates metric velocity using the corresponding depth image. Instead of accepting or rejecting measurements outright, visual odometry quality directly influences EKF measurement noise, reducing the influence of unreliable updates while still allowing them to contribute when appropriate.
 
-```bash
-ros2 launch twinguard_swarm_bringup twinguard_three_uav_replay_mission.launch.py \
-  dataset_csv:=/home/nitin/scenario23_seq20_real_channel_timeseries.csv \
-  drone_0_px4_prefix:="" \
-  drone_1_px4_prefix:=px4_1 \
-  drone_2_px4_prefix:=px4_2 \
-  drone_0_odometry:=/fmu/out/vehicle_odometry \
-  drone_1_odometry:=/px4_1/fmu/out/vehicle_odometry \
-  drone_2_odometry:=/px4_2/fmu/out/vehicle_odometry
-```
+Most importantly, the EKF publishes the exact same `trust_state` message as the default integrity node, meaning the remainder of the autonomy stack requires **no changes** when switching estimators.
 
-## Simulation Stack
+---
 
-Recommended stack:
+# Packages
 
-```text
-Ubuntu 22.04/24.04
-ROS 2 Humble or Jazzy
-Gazebo / Gazebo Harmonic-compatible PX4 setup
-PX4-Autopilot SITL
-px4_msgs
-px4_ros_com
-Micro XRCE-DDS Agent
-C++17
-```
+| Package | Language | Responsibility |
+|----------|----------|----------------|
+| `twinguard_swarm_integrity_cpp` | C++ | Digital twin prediction, integrity scoring, trust management, formation supervision, authority-gated offboard control |
+| `twinguard_swarm_planning_cpp` | C++ | BehaviorTree.CPP mission supervision, obstacle checking, local 3D A* planner |
+| `twinguard_swarm_estimation_cpp` | C++ | Sparse optical-flow visual odometry, 6-state EKF, EKF integrity node |
+| `twinguard_swarm_nav2_cpp` | C++ | Nav2 BT condition plugin and localization-aware costmap layer |
+| `twinguard_dataset_replay` | Python | Dataset-driven degradation injection into live PX4 odometry |
+| `twinguard_swarm_bringup` | Python | Launch files for integrity, replay, EKF, single-UAV, and multi-UAV experiments |
 
-Official references:
+---
 
-- [PX4 Gazebo Simulation](https://docs.px4.io/main/en/sim_gazebo_gz/)
-- [PX4 ROS 2 User Guide](https://docs.px4.io/main/en/ros2/user_guide)
-- [PX4 ROS 2 Offboard Control](https://docs.px4.io/main/en/ros2/offboard_control)
+# Engineering Decisions Worth Noting
 
-## Implementation Status
+### Continuous trust instead of binary fault detection
 
-This repository defines the ROS 2 package structure, autonomy-layer interfaces, topic contract, setup plan, C++ integrity-scoring package, C++ trust-gated formation supervisor, BehaviorTree.CPP mission selection, local A* rerouting, EKF/visual-odometry estimation path, Nav2-facing trust plugins, deployment container scaffolding, and real dataset replay bridge. The current default path closes the loop from PX4 odometry to C++ trust scoring to BT-guided setpoint selection to C++ offboard command publication. The opt-in Phase 3 launch swaps in `ekf_integrity_node`, which fuses PX4 position with sparse optical-flow visual-odometry velocity while preserving the same `trust_state` interface. The Phase 4 Nav2 package exposes that same trust contract to Nav2 without replacing Nav2 planners. Phase 5 provides reproducible Docker artifacts and a Fast-DDS microservice deployment profile, but full `colcon`, SITL, plugin-load, and Jetson validation still need to run on an Ubuntu ROS/Nav2 machine. Trajectory-risk monitoring is stubbed as a no-op `TrajectoryClear` BT condition until a shared multi-agent trajectory-intent topic is added.
+TwinGuard intentionally avoids a simple healthy/failed decision.
 
-## Intended Outcome
+Residuals are converted into a continuously varying trust score that gradually reduces vehicle authority as localization quality deteriorates. Mild degradation results in slower motion, while severe degradation can trigger a hold or reroute depending on the mission context.
+
+---
+
+### The Behavior Tree never controls PX4 directly
+
+The Behavior Tree only decides **which mission objective should be followed**.
+
+It may choose:
+
+- Hold Position
+- Local A* Reroute
+- Nominal Mission
+
+Those decisions are forwarded to the Offboard Supervisor, which always performs the final authority scaling before publishing commands to PX4.
+
+Separating mission logic from safety logic keeps responsibilities clear and prevents mission code from bypassing integrity constraints.
+
+---
+
+### Lightweight digital twin by design
+
+The default digital twin is intentionally simple.
+
+Rather than using a computationally expensive physics model, it propagates vehicle state using a constant-velocity prediction that is continuously corrected using incoming PX4 odometry. This produces stable prediction residuals while remaining suitable for real-time onboard execution.
+
+---
+
+### One trust interface for the entire autonomy stack
+
+Every major subsystem consumes the exact same trust message.
+
+Changing the integrity implementation—from the default predictor to the EKF estimator—does not require modifications anywhere else in the autonomy stack because the published interface remains identical.
+
+---
+
+### Nav2 integration is additive
+
+TwinGuard does not replace Nav2.
+
+Instead, it extends it.
+
+The custom Nav2 components expose localization confidence through:
+
+- a Behavior Tree condition node
+- a localization-aware costmap layer
+
+Unlike traditional costmaps that represent external obstacles, TwinGuard's costmap layer represents uncertainty around the robot's own estimated position. Existing planners, controllers, and recovery behaviors remain unchanged while automatically benefiting from integrity information.
+
+---
+
+### Dataset-driven validation
+
+Instead of generating artificial faults, TwinGuard can replay real degradation profiles collected from datasets.
+
+Dataset error, quality, and anomaly information are converted into controlled perturbations that are injected into live PX4 odometry before entering the integrity pipeline. This makes it possible to evaluate trust behavior under realistic degradation patterns while preserving the remainder of the autonomy stack unchanged.
+
+---
+
+### Microservice-oriented deployment
+
+TwinGuard separates the autonomy stack into independent services.
+
+- PX4 SITL
+- ROS 2 autonomy core
+- Nav2
+- experiment logging
+
+Fast DDS Discovery Server replaces multicast discovery, allowing the services to communicate reliably across Docker bridge networks while keeping safety-critical autonomy isolated from optional components such as logging.
 
 The intended final artifact is a reproducible UAV swarm simulation pipeline where dashboard values, metrics, and command-center videos are generated from PX4/Gazebo/ROS 2 experiment logs.
