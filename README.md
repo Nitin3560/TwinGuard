@@ -2,12 +2,16 @@
 
 > **Autonomy assurance for UAV swarms — trust-gated control, behavior-tree supervision, and Nav2 integration built on ROS 2, PX4 SITL, and Gazebo.**
 
-![ROS 2](https://img.shields.io/badge/ROS_2-Jazzy-22314E?style=flat&logo=ros&logoColor=white)
-![C++](https://img.shields.io/badge/C++-17-00599C?style=flat&logo=cplusplus&logoColor=white)
-![PX4](https://img.shields.io/badge/PX4-SITL-7B2D8B?style=flat)
-![Gazebo](https://img.shields.io/badge/Gazebo-Harmonic-F58113?style=flat)
-![Nav2](https://img.shields.io/badge/Nav2-integrated-2E86AB?style=flat)
-![BehaviorTree](https://img.shields.io/badge/BehaviorTree.CPP-v3-4A90D9?style=flat)
+![ROS 2 Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-22314E?style=flat&logo=ros&logoColor=white)
+![PX4 SITL](https://img.shields.io/badge/PX4-SITL-7B2D8B?style=flat)
+![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic-F58113?style=flat)
+![BehaviorTree.CPP](https://img.shields.io/badge/BehaviorTree.CPP-v3-4A90D9?style=flat)
+![Nav2](https://img.shields.io/badge/Nav2-Plugins-2E86AB?style=flat)
+![EKF](https://img.shields.io/badge/6--State-EKF-success?style=flat)
+![Visual Odometry](https://img.shields.io/badge/Sparse-Visual_Odometry-success?style=flat)
+![Digital Twin](https://img.shields.io/badge/Digital-Twin-success?style=flat)
+![Trust Scoring](https://img.shields.io/badge/Continuous-Trust_Scoring-success?style=flat)
+![Dataset Replay](https://img.shields.io/badge/Dataset-Replay-success?style=flat)
 
 ---
 
