@@ -204,3 +204,228 @@ TwinGuard separates the autonomy stack into independent services.
 Fast DDS Discovery Server replaces multicast discovery, allowing the services to communicate reliably across Docker bridge networks while keeping safety-critical autonomy isolated from optional components such as logging.
 
 The intended final artifact is a reproducible UAV swarm simulation pipeline where dashboard values, metrics, and command-center videos are generated from PX4/Gazebo/ROS 2 experiment logs.
+
+# Status
+
+| Component | Status |
+|------------|:------:|
+| Digital Twin Predictor | ✅ |
+| Continuous Trust Scoring | ✅ |
+| Authority-Gated Offboard Supervisor | ✅ |
+| BehaviorTree.CPP Mission Supervision | ✅ |
+| 3D Local A* Rerouting | ✅ |
+| Sparse Optical-Flow Visual Odometry | ✅ |
+| 6-State EKF Integrity Pipeline | ✅ |
+| Dataset Replay Validation | ✅ |
+| Nav2 Behavior Tree Plugin | ✅ |
+| Nav2 Localization Costmap Layer | ✅ |
+| Docker Microservice Deployment | ✅ |
+| Fast DDS Discovery Server | ✅ |
+| Full PX4 SITL + ROS 2 Integration | ✅ |
+| Multi-UAV Formation Support | ✅ |
+| Multi-Agent Trajectory Conflict Prediction | ⏳ Planned |
+
+---
+
+# Repository Structure
+
+```text
+TwinGuard
+│
+├── ros2_ws/
+│   └── src/
+│       ├── twinguard_swarm_integrity_cpp/
+│       ├── twinguard_swarm_planning_cpp/
+│       ├── twinguard_swarm_estimation_cpp/
+│       ├── twinguard_swarm_nav2_cpp/
+│       ├── twinguard_dataset_replay/
+│       └── twinguard_swarm_bringup/
+│
+├── docker/
+│
+├── docs/
+│
+└── results/
+```
+
+---
+
+# Example Workflows
+
+## Default Integrity Pipeline
+
+```text
+PX4 VehicleOdometry
+        │
+        ▼
+Digital Twin Predictor
+        │
+Residual Computation
+        │
+Trust Scoring
+        │
+trust_state
+        │
+Behavior Tree
+        │
+Offboard Supervisor
+        │
+PX4 Offboard Commands
+```
+
+---
+
+## EKF Integrity Pipeline
+
+```text
+PX4 Odometry
+        │
+        ├──────────────┐
+        │              │
+        ▼              ▼
+Visual Odometry     PX4 Position
+        │              │
+        └──────┬───────┘
+               ▼
+         6-State EKF
+               │
+        Integrity Score
+               │
+         trust_state
+               │
+      Remaining Stack
+```
+
+---
+
+## Dataset Replay Pipeline
+
+```text
+Real Dataset
+      │
+      ▼
+Replay Node
+      │
+Controlled Odometry Perturbation
+      │
+PX4 VehicleOdometry
+      │
+Integrity Pipeline
+      │
+Trust Score
+```
+
+The replay node does not replay prerecorded trajectories.
+
+Instead, it injects controlled localization degradation derived from real dataset measurements into live PX4 odometry, allowing the remainder of the autonomy stack to operate exactly as it would during normal flight.
+
+---
+
+# Why TwinGuard Was Built
+
+Most autonomy stacks answer a single question:
+
+> **Where is the vehicle?**
+
+TwinGuard asks an additional question:
+
+> **How much should the autonomy stack trust that answer?**
+
+Once integrity becomes available as a continuous signal instead of a binary alarm, every autonomy component can make better decisions.
+
+The controller can reduce authority.
+
+The planner can become more conservative.
+
+The supervisor can hold position when confidence becomes too low.
+
+Nav2 can account for localization uncertainty.
+
+Instead of reacting after a failure occurs, TwinGuard continuously adapts autonomous behavior as localization confidence changes.
+
+---
+
+# Current Limitations
+
+TwinGuard is still an active engineering project.
+
+Current limitations include:
+
+- Multi-agent trajectory conflict prediction is currently a placeholder.
+- Global path planning is intentionally delegated to Nav2.
+- The default digital twin uses a lightweight constant-velocity predictor rather than a full vehicle dynamics model.
+- Gazebo is currently the primary validation environment.
+- Hardware flight testing has not yet been integrated into the repository.
+
+These limitations are intentional and define the next stages of development.
+
+---
+
+# Future Work
+
+- Multi-agent trajectory conflict prediction
+- Shared swarm trust reasoning
+- Dynamic obstacle avoidance
+- Distributed integrity sharing across UAVs
+- Hardware validation on PX4 flight controllers
+- Isaac Sim evaluation and threshold calibration
+- Learning-based digital twin models
+- Mission-level resilience policies
+
+---
+
+# Simulation Fidelity
+
+TwinGuard's integrity thresholds are currently calibrated using Gazebo.
+
+The companion project **sim-val** evaluates the sensor fidelity gap between Gazebo and NVIDIA Isaac Sim RTX by measuring how differences in simulated sensing propagate into TwinGuard's integrity pipeline and EKF trust estimation.
+
+The long-term goal is to derive simulator-specific trust calibration rather than relying on manually tuned thresholds.
+
+---
+
+# Documentation
+
+- Architecture
+- Topic Contract
+- Quick Start
+- Deployment Guide
+- Dataset Replay
+- EKF Integrity Pipeline
+- Docker Deployment
+
+---
+
+# Technologies
+
+- ROS 2 Jazzy
+- PX4 SITL
+- Gazebo Harmonic
+- Nav2
+- BehaviorTree.CPP
+- Fast DDS
+- OpenCV
+- Eigen
+- Docker
+- C++17
+- Python
+
+---
+
+# Research Context
+
+TwinGuard was developed as part of ongoing research into resilient autonomy for UAV swarms.
+
+The project explores how localization integrity can become a shared signal across estimation, planning, supervision, and navigation instead of remaining isolated inside a single fault-detection module.
+
+Many of the ideas implemented here—including trust-based authority scaling, digital twin residual analysis, EKF-based integrity estimation, and dataset-driven degradation replay—are part of broader research efforts in resilient autonomous systems.
+
+---
+
+## License
+
+This repository is intended for research and educational purposes.
+
+---
+
+> **TwinGuard demonstrates how localization integrity can become a shared decision-making signal across an entire autonomy stack, allowing UAVs to respond proportionally to degraded sensing instead of treating every fault as an immediate failure.**
