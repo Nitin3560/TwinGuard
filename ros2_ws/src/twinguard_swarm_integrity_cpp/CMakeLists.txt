@@ -75,10 +75,15 @@ install(
 )
 
 install(
-  TARGETS twinguard_integrity_core integrity_node_cpp formation_supervisor_node
+  TARGETS twinguard_integrity_core
   EXPORT export_twinguard_integrity_core
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  TARGETS integrity_node_cpp formation_supervisor_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
