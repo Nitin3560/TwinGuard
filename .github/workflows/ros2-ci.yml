@@ -23,6 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             python3-colcon-common-extensions \
+            ros-humble-ros-base \
             python3-vcstool \
             ros-humble-nav2-bringup \
             ros-humble-ros-gz-bridge \
