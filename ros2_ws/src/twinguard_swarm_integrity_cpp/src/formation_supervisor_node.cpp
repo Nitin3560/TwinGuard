@@ -130,7 +130,7 @@ private:
     return item;
   }
 
-  int64_t timestamp_us() const
+  int64_t timestamp_us()
   {
     return get_clock()->now().nanoseconds() / 1000;
   }
