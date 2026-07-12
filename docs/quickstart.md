@@ -53,13 +53,26 @@ Micro XRCE-DDS Agent
 ## 4. Build TwinGuard ROS 2 Workspace
 
 ```bash
-cd TwinGuard-Swarm-Gazebo/ros2_ws
-source /opt/ros/jazzy/setup.bash
+mkdir -p ~/twinguard_ws/src
+cd ~/twinguard_ws/src
+git clone https://github.com/Nitin3560/TwinGuard-Swarm-Gazebo.git
+vcs import . < TwinGuard-Swarm-Gazebo/dependencies.repos
+
+cd ~/twinguard_ws
+source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
 colcon build --symlink-install
-source install/setup.bash
+colcon test
+colcon test-result --verbose
 ```
 
-For a reproducible container build path, see [deployment.md](deployment.md). The deployment Dockerfile consolidates the ROS, PX4 message, BehaviorTree.CPP, Nav2, Eigen, OpenCV, and Gazebo bridge dependencies used by the C++ packages.
+For a reproducible container build path, see [deployment.md](deployment.md). The GitHub Actions workflow runs this same fresh-workspace build on Ubuntu 22.04 / ROS 2 Humble.
+
+Source the workspace after the build passes:
+
+```bash
+source ~/twinguard_ws/install/setup.bash
+```
 
 ## 5. Launch Initial TwinGuard Nodes
 
