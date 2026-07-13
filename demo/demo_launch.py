@@ -60,5 +60,11 @@ def generate_launch_description():
                 "mission_mode": "hold",
                 "static_obstacle_enabled": False,
             }],
+            remappings=[
+                ("fmu/out/vehicle_odometry", "/fmu/out/vehicle_odometry"),
+                ("fmu/in/offboard_control_mode", "/fmu/in/offboard_control_mode"),
+                ("fmu/in/trajectory_setpoint", "/fmu/in/trajectory_setpoint"),
+                ("fmu/in/vehicle_command", "/fmu/in/vehicle_command"),
+            ],
         ),
     ])
