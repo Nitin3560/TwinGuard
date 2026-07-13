@@ -180,6 +180,10 @@ class TestIntegritySupervisorPipeline(unittest.TestCase):
         mode, values = self._wait_for_supervisor_mode({"nominal"}, timeout_sec=6.0)
         self.assertEqual(mode, "nominal")
         self.assertEqual(values.get("hold"), "false")
+
+        self._publish_position((0.0, 0.0, 0.0), seconds=1.5)
+        rclpy.spin_once(self.node, timeout_sec=0.1)
+        values = _diag_values(self.latest_supervisor_diag)
         recovered_authority = float(values["authority_scale"])
         self.assertGreater(recovered_authority, degraded_authority)
         self.assertGreater(recovered_authority, 0.9)
