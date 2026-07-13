@@ -67,8 +67,6 @@ ament_target_dependencies(ekf_integrity_node
   geometry_msgs
   diagnostic_msgs
   px4_msgs
-  # Reuses TrustScorer from twinguard_integrity_core through the exported
-  # twinguard_swarm_integrity_cpp ament package.
   twinguard_swarm_integrity_cpp
 )
 
@@ -78,10 +76,15 @@ install(
 )
 
 install(
-  TARGETS twinguard_estimation_core visual_odometry_node ekf_integrity_node
+  TARGETS twinguard_estimation_core
   EXPORT export_twinguard_estimation_core
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  TARGETS visual_odometry_node ekf_integrity_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
