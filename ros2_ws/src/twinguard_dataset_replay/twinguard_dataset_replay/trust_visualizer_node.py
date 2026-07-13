@@ -29,10 +29,10 @@ class TrustVisualizerNode(Node):
         self.create_timer(0.1, self._publish_visuals)
 
     def _on_odometry(self, msg):
-        self.position = [msg.position[0], msg.position[1], msg.position[2]]
+        self.position = [float(msg.position[0]), float(msg.position[1]), float(msg.position[2])]
 
     def _on_trust(self, msg):
-        self.trust = msg.point.x
+        self.trust = float(msg.point.x)
 
     def _publish_visuals(self):
         now = self.get_clock().now().to_msg()
