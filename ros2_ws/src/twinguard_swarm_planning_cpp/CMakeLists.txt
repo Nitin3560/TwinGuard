@@ -10,6 +10,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(behaviortree_cpp_v3 REQUIRED)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+endif()
 
 include_directories(include)
 
@@ -49,5 +52,10 @@ ament_export_include_directories(include)
 ament_export_libraries(twinguard_planning_core)
 ament_export_targets(export_twinguard_planning_core HAS_LIBRARY_TARGET)
 ament_export_dependencies(behaviortree_cpp_v3)
+
+if(BUILD_TESTING)
+  ament_add_gtest(test_astar_planner test/test_astar_planner.cpp)
+  target_link_libraries(test_astar_planner twinguard_planning_core)
+endif()
 
 ament_package()
