@@ -24,10 +24,7 @@ jobs:
           sudo apt-get install -y \
             python3-colcon-common-extensions \
             ros-humble-ros-base \
-            python3-vcstool \
-            ros-humble-nav2-bringup \
-            ros-humble-ros-gz-bridge \
-            ros-humble-ros-gz-image
+            python3-vcstool
 
       - name: Prepare fresh workspace
         run: |
@@ -39,7 +36,8 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           rosdep update
-          rosdep install --from-paths ~/twinguard_ws/src --ignore-src -r -y --rosdistro humble
+          rosdep install --from-paths ~/twinguard_ws/src --ignore-src -r -y --rosdistro humble \
+            --skip-keys "ros_gz_bridge ros_gz_image"
 
       - name: Build workspace
         run: |
