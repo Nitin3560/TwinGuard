@@ -17,6 +17,13 @@
   <exec_depend>image_transport</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
 
+  <test_depend>diagnostic_msgs</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+  <test_depend>px4_msgs</test_depend>
+  <test_depend>rclpy</test_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
