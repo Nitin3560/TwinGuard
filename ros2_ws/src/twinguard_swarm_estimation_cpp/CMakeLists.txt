@@ -19,6 +19,9 @@ find_package(cv_bridge REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(twinguard_swarm_integrity_cpp REQUIRED)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+endif()
 
 include_directories(include)
 
@@ -92,5 +95,10 @@ ament_export_include_directories(include)
 ament_export_libraries(twinguard_estimation_core)
 ament_export_targets(export_twinguard_estimation_core HAS_LIBRARY_TARGET)
 ament_export_dependencies(Eigen3 OpenCV)
+
+if(BUILD_TESTING)
+  ament_add_gtest(test_ekf_estimator test/test_ekf_estimator.cpp)
+  target_link_libraries(test_ekf_estimator twinguard_estimation_core)
+endif()
 
 ament_package()
