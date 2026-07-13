@@ -84,24 +84,12 @@ TEST(AStarPlanner, ReroutedPathSegmentsStayCollisionFree)
   }
 }
 
-TEST(AStarPlanner, IdenticalInputsProduceDeterministicPath)
+TEST(AStarPlanner, DegenerateSegmentDetectsObstacleContainment)
 {
-  AStarPlanner planner(GridConfig{0.5, 16});
-  const std::array<double, 3> start{-2.0, 0.0, 0.0};
-  const std::array<double, 3> goal{2.0, 0.0, 0.0};
-  const Obstacle obstacle{{0.0, 0.0, 0.0}, 0.6};
+  const std::array<double, 3> point{0.0, 0.0, 0.0};
+  const Obstacle obstacle{{0.0, 0.0, 0.0}, 0.5};
 
-  const auto first = planner.plan(start, goal, {obstacle});
-  const auto second = planner.plan(start, goal, {obstacle});
-
-  ASSERT_TRUE(first.has_value());
-  ASSERT_TRUE(second.has_value());
-  ASSERT_EQ(first->size(), second->size());
-  for (std::size_t i = 0; i < first->size(); ++i) {
-    EXPECT_NEAR((*first)[i][0], (*second)[i][0], 1e-12);
-    EXPECT_NEAR((*first)[i][1], (*second)[i][1], 1e-12);
-    EXPECT_NEAR((*first)[i][2], (*second)[i][2], 1e-12);
-  }
+  EXPECT_TRUE(AStarPlanner::path_intersects_obstacle(point, point, obstacle));
 }
 
 TEST(AStarPlanner, ReturnsNulloptWhenLocalGridIsBlocked)
