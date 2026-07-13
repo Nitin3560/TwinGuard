@@ -85,6 +85,56 @@ TEST(TrustScorer, AuthorityNeverDropsBelowMinimum)
   EXPECT_NEAR(last.authority_scale, min_authority, 1e-6);
 }
 
+TEST(TrustScorer, VeryLargeResidualStaysFinite)
+{
+  TrustScorer scorer;
+  const std::array<double, 3> predicted{0.0, 0.0, 0.0};
+  const std::array<double, 3> measured{1.0e6, -1.0e6, 1.0e6};
+
+  const auto result = scorer.update(measured, predicted);
+
+  EXPECT_TRUE(std::isfinite(result.residual));
+  EXPECT_TRUE(std::isfinite(result.trust));
+  EXPECT_TRUE(std::isfinite(result.authority_scale));
+  EXPECT_GE(result.authority_scale, 0.15);
+}
+
+TEST(TrustScorer, RecoversAfterResidualReturnsToNominal)
+{
+  TrustScorer scorer;
+  const std::array<double, 3> predicted{0.0, 0.0, 0.0};
+  const std::array<double, 3> degraded{5.0, 0.0, 0.0};
+  const std::array<double, 3> nominal{0.0, 0.0, 0.0};
+
+  twinguard::integrity::TrustState state{};
+  for (int i = 0; i < 30; ++i) {
+    state = scorer.update(degraded, predicted);
+  }
+  ASSERT_LT(state.trust, 0.35);
+
+  for (int i = 0; i < 60; ++i) {
+    state = scorer.update(nominal, predicted);
+  }
+  EXPECT_GT(state.trust, 0.65);
+  EXPECT_EQ(state.fault_label, "nominal");
+  EXPECT_GT(state.authority_scale, 0.65);
+}
+
+TEST(TrustScorer, BetaEndpointsSelectInstantOrHeldTrust)
+{
+  const std::array<double, 3> predicted{0.0, 0.0, 0.0};
+  const std::array<double, 3> measured{1.0, 0.0, 0.0};
+
+  TrustScorer instant(1.2, 0.0, 0.15);
+  const auto instant_state = instant.update(measured, predicted);
+  EXPECT_NEAR(instant_state.trust, std::exp(-1.2), 1e-9);
+
+  TrustScorer held(1.2, 1.0, 0.15);
+  const auto held_state = held.update(measured, predicted);
+  EXPECT_NEAR(held_state.trust, 1.0, 1e-9);
+  EXPECT_EQ(held_state.fault_label, "nominal");
+}
+
 TEST(DigitalTwinPredictor, PredictWithoutResetStaysAtOrigin)
 {
   DigitalTwinPredictor predictor;
