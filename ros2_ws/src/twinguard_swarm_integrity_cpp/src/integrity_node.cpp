@@ -96,7 +96,9 @@ private:
     const auto predicted = twin_.predict();
     const TrustState state = scorer_.update(measured_position_, predicted);
     constexpr double kBaseCorrectionGain = 0.15;
-    twin_.correct_position(measured_position_, kBaseCorrectionGain * state.trust);
+    if (state.fault_label == "nominal" && state.residual <= 1.0) {
+      twin_.correct_position(measured_position_, kBaseCorrectionGain * state.trust);
+    }
 
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.name = "twinguard_integrity_drone_" + std::to_string(drone_id_);
