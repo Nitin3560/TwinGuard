@@ -34,3 +34,4 @@ experiments/runs/*
 .DS_Store
 .vscode/
 .idea/
+demo/raw_recording/
