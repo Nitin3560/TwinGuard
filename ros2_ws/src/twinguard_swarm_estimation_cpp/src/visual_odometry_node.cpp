@@ -6,7 +6,11 @@
 #include <string>
 
 #include "builtin_interfaces/msg/time.hpp"
+#if __has_include("cv_bridge/cv_bridge.hpp")
 #include "cv_bridge/cv_bridge.hpp"
+#else
+#include "cv_bridge/cv_bridge.h"
+#endif
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
