@@ -95,4 +95,14 @@ void DigitalTwinPredictor::correct_velocity(
   velocity_[2] = (1.0 - alpha) * velocity_[2] + alpha * velocity[2];
 }
 
+void DigitalTwinPredictor::correct_position(
+  const std::array<double, 3> & position,
+  double weight)
+{
+  const double gain = std::clamp(weight, 0.0, 1.0);
+  position_[0] += gain * (position[0] - position_[0]);
+  position_[1] += gain * (position[1] - position_[1]);
+  position_[2] += gain * (position[2] - position_[2]);
+}
+
 }  // namespace twinguard::integrity

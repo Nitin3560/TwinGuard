@@ -177,6 +177,24 @@ TEST(DigitalTwinPredictor, CorrectVelocityActsAsExponentialMovingAverage)
   EXPECT_NEAR(pos[2], 0.0, 1e-9);
 }
 
+TEST(DigitalTwinPredictor, CorrectPositionPullsTowardMeasurementByWeight)
+{
+  DigitalTwinPredictor predictor(1.0);
+  predictor.reset({0.0, 0.0, 0.0});
+
+  predictor.correct_position({10.0, -4.0, 2.0}, 0.25);
+  const auto corrected = predictor.predict();
+  EXPECT_NEAR(corrected[0], 2.5, 1e-9);
+  EXPECT_NEAR(corrected[1], -1.0, 1e-9);
+  EXPECT_NEAR(corrected[2], 0.5, 1e-9);
+
+  predictor.correct_position({10.0, -4.0, 2.0}, 0.0);
+  const auto unchanged = predictor.predict();
+  EXPECT_NEAR(unchanged[0], corrected[0], 1e-9);
+  EXPECT_NEAR(unchanged[1], corrected[1], 1e-9);
+  EXPECT_NEAR(unchanged[2], corrected[2], 1e-9);
+}
+
 TEST(MissionSetpoint, FigureEightCrossesCenterAndScalesWithAuthority)
 {
   CircleMissionParams params;

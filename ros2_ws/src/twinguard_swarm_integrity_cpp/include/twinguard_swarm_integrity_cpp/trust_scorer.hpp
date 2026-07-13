@@ -44,6 +44,7 @@ public:
   std::array<double, 3> predict();
 
   void correct_velocity(const std::array<double, 3> & velocity, double alpha = 0.2);
+  void correct_position(const std::array<double, 3> & position, double weight);
 
 private:
   double dt_;
