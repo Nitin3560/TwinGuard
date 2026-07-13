@@ -27,6 +27,10 @@ public:
     stale_timeout_ms_ = declare_parameter<int>("stale_timeout_ms", 500);
     prediction_dt_ = declare_parameter<double>("prediction_dt", 0.1);
     twin_ = DigitalTwinPredictor(prediction_dt_);
+    const double alpha = declare_parameter<double>("alpha", 1.2);
+    const double beta = declare_parameter<double>("beta", 0.90);
+    const double min_authority = declare_parameter<double>("min_authority", 0.15);
+    scorer_ = TrustScorer(alpha, beta, min_authority);
 
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "integrity_diagnostics", 10);
