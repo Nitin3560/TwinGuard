@@ -58,8 +58,8 @@ def generate_launch_description():
                 "auto_arm": True,
                 "force_arm": True,
                 "mission_mode": "figure8",
-                "mission_radius_m": 5.0,
-                "mission_period_s": 18.0,
+                "mission_radius_m": 12.0,
+                "mission_period_s": 22.0,
                 "static_obstacle_enabled": False,
             }],
             remappings=[
@@ -68,5 +68,11 @@ def generate_launch_description():
                 ("fmu/in/trajectory_setpoint", "/fmu/in/trajectory_setpoint"),
                 ("fmu/in/vehicle_command", "/fmu/in/vehicle_command"),
             ],
+        ),
+        Node(
+            package="twinguard_dataset_replay",
+            executable="trust_visualizer_node",
+            name="trust_visualizer_node",
+            output="screen",
         ),
     ])
