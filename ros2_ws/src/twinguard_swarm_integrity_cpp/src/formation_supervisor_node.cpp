@@ -220,7 +220,7 @@ private:
     publish_offboard_mode(timestamp);
     publish_setpoint(timestamp, command);
 
-    if (auto_arm_ && (tick_count_ == 20 || tick_count_ == 60)) {
+    if (auto_arm_ && tick_count_ >= 20 && (tick_count_ % 30 == 0)) {
       request_offboard_mode(timestamp);
       arm(timestamp);
     }
