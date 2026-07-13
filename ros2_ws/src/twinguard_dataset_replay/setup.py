@@ -19,6 +19,7 @@ setup(
     entry_points={
         "console_scripts": [
             "dataset_replay_node = twinguard_dataset_replay.dataset_replay_node:main",
+            "trust_visualizer_node = twinguard_dataset_replay.trust_visualizer_node:main",
         ],
     },
 )
