@@ -57,7 +57,9 @@ def generate_launch_description():
                 "setpoint_rate_hz": 10.0,
                 "auto_arm": True,
                 "force_arm": True,
-                "mission_mode": "hold",
+                "mission_mode": "figure8",
+                "mission_radius_m": 5.0,
+                "mission_period_s": 18.0,
                 "static_obstacle_enabled": False,
             }],
             remappings=[

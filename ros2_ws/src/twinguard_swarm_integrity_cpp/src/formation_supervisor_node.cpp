@@ -182,7 +182,7 @@ private:
     std::array<double, 3> mission = nominal_setpoint_;
     double mission_yaw = nominal_yaw_;
 
-    if (mission_params_.mode == "circle") {
+    if (mission_params_.mode == "circle" || mission_params_.mode == "figure8") {
       const double elapsed_s = (now - start_time_).seconds();
       mission = circle_mission_setpoint(mission_params_, elapsed_s, authority);
       mission_yaw = circle_mission_yaw(mission_params_, elapsed_s, authority);

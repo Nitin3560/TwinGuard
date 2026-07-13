@@ -3,8 +3,11 @@
 #include <array>
 #include <cmath>
 
+#include "twinguard_swarm_integrity_cpp/offboard_supervisor.hpp"
 #include "twinguard_swarm_integrity_cpp/trust_scorer.hpp"
 
+using twinguard::offboard::CircleMissionParams;
+using twinguard::offboard::circle_mission_setpoint;
 using twinguard::integrity::DigitalTwinPredictor;
 using twinguard::integrity::TrustScorer;
 
@@ -172,4 +175,30 @@ TEST(DigitalTwinPredictor, CorrectVelocityActsAsExponentialMovingAverage)
   EXPECT_NEAR(pos[0], 2.0, 1e-9);
   EXPECT_NEAR(pos[1], 0.0, 1e-9);
   EXPECT_NEAR(pos[2], 0.0, 1e-9);
+}
+
+TEST(MissionSetpoint, FigureEightCrossesCenterAndScalesWithAuthority)
+{
+  CircleMissionParams params;
+  params.mode = "figure8";
+  params.center_x = 1.0;
+  params.center_y = -2.0;
+  params.altitude_m = 3.0;
+  params.radius_m = 5.0;
+  params.period_s = 20.0;
+
+  const auto start = circle_mission_setpoint(params, 0.0, 1.0);
+  EXPECT_NEAR(start[0], 1.0, 1e-9);
+  EXPECT_NEAR(start[1], -2.0, 1e-9);
+  EXPECT_NEAR(start[2], -3.0, 1e-9);
+
+  const auto quarter = circle_mission_setpoint(params, 5.0, 0.5);
+  EXPECT_NEAR(quarter[0], 3.5, 1e-9);
+  EXPECT_NEAR(quarter[1], -2.0, 1e-9);
+  EXPECT_NEAR(quarter[2], -3.0, 1e-9);
+
+  const auto half = circle_mission_setpoint(params, 10.0, 1.0);
+  EXPECT_NEAR(half[0], 1.0, 1e-9);
+  EXPECT_NEAR(half[1], -2.0, 1e-9);
+  EXPECT_NEAR(half[2], -3.0, 1e-9);
 }

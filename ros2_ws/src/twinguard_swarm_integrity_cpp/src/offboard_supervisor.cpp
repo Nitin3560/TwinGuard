@@ -82,10 +82,17 @@ std::array<double, 3> circle_mission_setpoint(
     return {params.center_x, params.center_y, -params.altitude_m};
   }
 
-  const double radius = params.radius_m * std::clamp(authority_scale, 0.0, 1.0);
+  const double amplitude = params.radius_m * std::clamp(authority_scale, 0.0, 1.0);
   const double phase = 2.0 * kPi * elapsed_s / std::max(params.period_s, 1.0);
-  const double x = params.center_x + radius * std::cos(phase);
-  const double y = params.center_y + radius * std::sin(phase);
+
+  if (params.mode == "figure8") {
+    const double x = params.center_x + amplitude * std::sin(phase);
+    const double y = params.center_y + amplitude * std::sin(phase) * std::cos(phase);
+    return {x, y, -params.altitude_m};
+  }
+
+  const double x = params.center_x + amplitude * std::cos(phase);
+  const double y = params.center_y + amplitude * std::sin(phase);
   return {x, y, -params.altitude_m};
 }
 
