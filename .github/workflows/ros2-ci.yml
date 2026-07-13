@@ -49,5 +49,6 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           cd ~/twinguard_ws
+          source install/setup.bash
           colcon test --event-handlers console_direct+
           colcon test-result --verbose
