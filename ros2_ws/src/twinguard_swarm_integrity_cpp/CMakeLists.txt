@@ -17,6 +17,9 @@ find_package(px4_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(behaviortree_cpp_v3 REQUIRED)
 find_package(twinguard_swarm_planning_cpp REQUIRED)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+endif()
 
 include_directories(include)
 
@@ -90,5 +93,10 @@ install(
 ament_export_include_directories(include)
 ament_export_libraries(twinguard_integrity_core)
 ament_export_targets(export_twinguard_integrity_core HAS_LIBRARY_TARGET)
+
+if(BUILD_TESTING)
+  ament_add_gtest(test_trust_scorer test/test_trust_scorer.cpp)
+  target_link_libraries(test_trust_scorer twinguard_integrity_core)
+endif()
 
 ament_package()
