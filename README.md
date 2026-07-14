@@ -1,6 +1,6 @@
 # TwinGuard
 
-> **Trust-aware autonomy framework for UAVs built on ROS 2, PX4 SITL, and Gazebo. TwinGuard continuously estimates localization integrity and adapts planning, supervision, and offboard control before degraded state estimates propagate through the autonomy stack.**
+> **Trust-aware autonomy framework for UAVs built on ROS 2, PX4 SITL, and Gazebo. TwinGuard continuously estimates localization integrity and adapts planning, supervision, and offboard control before unreliable state estimates propagate through the autonomy stack.**
 
 ![ROS 2 CI](https://github.com/Nitin3560/TwinGuard/actions/workflows/ros2-ci.yml/badge.svg)
 ![ROS 2 Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-22314E?style=flat&logo=ros&logoColor=white)
@@ -23,6 +23,15 @@
 ![TwinGuard Demo](docs/demo-small.gif)
 
 ---
+## Key Capabilities
+
+- Continuous localization trust estimation
+- Trust-aware offboard supervision
+- BehaviorTree.CPP mission execution
+- Nav2 localization-aware planning
+- PX4 SITL + Gazebo integration
+- Dataset replay for repeatable validation
+- Automated CI, unit tests, and ROS 2 integration tests
 
 ## Architecture
 
@@ -128,16 +137,18 @@ Localization residuals remain low during normal operation. When degraded localiz
 
 ## Engineering Highlights
 
-- Modular ROS 2 package architecture
-- PX4 SITL + Gazebo Harmonic integration
-- Continuous trust estimation instead of binary fault detection
-- Trust-aware offboard supervision
-- BehaviorTree.CPP mission supervision
-- Nav2 localization-aware extensions
-- Dataset replay for repeatable degradation scenarios
-- 6-state Kalman-based integrity estimation
-- Docker-based development environment
-- Fast DDS deployment support
+• Modular ROS 2 package architecture
+• PX4 SITL + Gazebo Harmonic integration
+• Continuous trust estimation
+• Trust-aware offboard supervision
+• BehaviorTree.CPP mission supervision
+• Nav2 localization-aware plugins
+• Dataset replay for repeatable degradation scenarios
+• Kalman-based state estimation
+• GitHub Actions continuous integration
+• GoogleTest unit testing
+• ROS 2 launch integration testing
+• Docker deployment support
 
 ---
 
@@ -145,11 +156,11 @@ Localization residuals remain low during normal operation. When degraded localiz
 
 TwinGuard has been validated using a reproducible ROS 2 workflow.
 
-### Build & CI
+### Continuous Integration
 
 - ✅ Ubuntu 24.04
 - ✅ ROS 2 Jazzy
-- ✅ Full colcon build
+- ✅ Full workspace build
 - ✅ GitHub Actions CI
 - ✅ Automated package testing
 
@@ -191,11 +202,11 @@ Authority-scaled Commands
 | Visual odometry | ✅ |
 | Kalman estimator | ✅ |
 | Nav2 plugins | ✅ |
-| Docker environment | ✅ |
+| Docker deployment | ✅ |
 | GitHub Actions CI | ✅ |
 | GoogleTest suite | ✅ |
 | ROS 2 integration tests | ✅ |
-| PX4 SITL demonstration | ✅ |
+| End-to-end PX4 SITL demonstration | ✅ |
 | Multi-UAV conflict monitoring | 🚧 |
 
 ---
@@ -211,6 +222,5 @@ Authority-scaled Commands
 
 ## Companion Project
 
-The companion project **sim-val** evaluates simulator fidelity across Gazebo and NVIDIA Isaac Sim and studies how simulation fidelity affects TwinGuard's localization integrity estimation.
-
+The companion project **sim-val** evaluates the sensing fidelity gap between Gazebo and NVIDIA Isaac Sim and studies how simulator fidelity influences TwinGuard's localization integrity estimation and supervisory behavior.
 > **TwinGuard treats localization integrity as a shared runtime signal, allowing estimation, planning, and control to adapt together rather than reacting independently to degraded localization.**
