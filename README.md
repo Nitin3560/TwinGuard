@@ -86,8 +86,32 @@ TrajectorySetpoint
          PX4
 ```
 
+
 ---
 
+## Validation
+
+TwinGuard is validated using PX4 SITL and Gazebo by injecting localization degradation into the autonomy pipeline and observing how trust-aware supervision adapts vehicle authority.
+
+### Trust-aware supervisory response
+
+<p align="center">
+<img src="docs/images/trust_authority_response.png" width="900" alt="Trust-aware supervisory response"/>
+</p>
+
+During nominal operation, trust remains high and the supervisor allows full authority. When localization integrity degrades, trust drops rapidly, authority is reduced to a configurable floor, and the supervisor transitions into **degraded-hold** mode to prevent unsafe control commands.
+
+---
+
+### Residual-driven trust collapse
+
+<p align="center">
+<img src="docs/images/residual_vs_trust.png" width="900" alt="Residual-driven trust collapse"/>
+</p>
+
+Localization residuals remain low during normal operation. When degraded localization is introduced, residuals increase sharply, causing the trust estimator to reduce confidence before corrupted state estimates propagate through planning and control.
+
+---
 ## Packages
 
 | Package | Responsibility |
