@@ -1,111 +1,192 @@
 # TwinGuard
 
-> **Autonomy assurance for UAV swarms — trust-gated control, behavior-tree supervision, and Nav2 integration built on ROS 2, PX4 SITL, and Gazebo.**
+> **Trust-aware autonomy framework for UAVs built on ROS 2, PX4 SITL, and Gazebo. TwinGuard continuously estimates localization integrity and adapts planning, supervision, and offboard control before degraded state estimates propagate through the autonomy stack.**
 
+![CI](https://github.com/Nitin3560/TwinGuard/actions/workflows/ci.yml/badge.svg)
 ![ROS 2 Jazzy](https://img.shields.io/badge/ROS_2-Jazzy-22314E?style=flat&logo=ros&logoColor=white)
 ![PX4 SITL](https://img.shields.io/badge/PX4-SITL-7B2D8B?style=flat)
 ![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic-F58113?style=flat)
+![C++17](https://img.shields.io/badge/C++-17-blue?style=flat)
+![GoogleTest](https://img.shields.io/badge/GoogleTest-Passing-success?style=flat)
 ![BehaviorTree.CPP](https://img.shields.io/badge/BehaviorTree.CPP-v3-4A90D9?style=flat)
 ![Nav2](https://img.shields.io/badge/Nav2-Plugins-2E86AB?style=flat)
-![EKF](https://img.shields.io/badge/6--State-EKF-success?style=flat)
-![Visual Odometry](https://img.shields.io/badge/Sparse-Visual_Odometry-success?style=flat)
-![Digital Twin](https://img.shields.io/badge/Digital-Twin-success?style=flat)
-![Trust Scoring](https://img.shields.io/badge/Continuous-Trust_Scoring-success?style=flat)
-![Dataset Replay](https://img.shields.io/badge/Dataset-Replay-success?style=flat)
 
 ---
 
-TwinGuard is a ROS 2 and PX4-based autonomy framework for making UAV swarms more resilient when localization becomes unreliable.
+## Demo
 
-Most autonomy systems assume localization is trustworthy. When GPS is spoofed, communication degrades, or sensor measurements become inconsistent, planners and controllers often continue operating on corrupted state estimates or immediately fall back to an emergency failsafe.
-
-TwinGuard is built around a different idea: **integrity is a continuous signal, not a binary flag.**
-
-Instead of deciding whether a UAV has "failed," TwinGuard continuously estimates how trustworthy each vehicle's state is and shares that information across planning, supervision, and control. A degraded UAV slows down, reroutes, or holds position proportionally to its confidence instead of failing catastrophically.
-
-The goal is simple: **make localization integrity part of the autonomy pipeline rather than an isolated fault detector.**
-
----
-
-## System Overview
-
-TwinGuard is organized around one simple idea: **estimation, planning, and control remain independent while sharing a common trust interface.**
-
-The integrity node estimates trust from PX4 odometry. The Behavior Tree selects mission intent, and the Offboard Supervisor applies the final authority gate before commands reach PX4. Nav2 consumes the same trust information without modifying its planners or controllers.
-
-An optional EKF integrity node can replace the default estimator because both publish the same `trust_state` interface.
+<p align="center">
+<b>End-to-end PX4 SITL demonstration showing nominal operation, localization degradation, trust-aware supervision, and recovery.</b>
+<br><br>
+🎥 <b>Demo Video</b>
+</p>
 
 ---
 
 ## Architecture
 
 <p align="center">
-  <img src="docs/architecture.png" width="780" alt="TwinGuard Architecture"/>
+<img src="docs/architecture.png" width="820" alt="TwinGuard Architecture"/>
 </p>
 
-The architecture separates estimation, planning, and control into independent components connected through a common trust interface. This makes it possible to replace the integrity estimator, extend planning behavior, or integrate Nav2 without changing the rest of the autonomy pipeline.
+TwinGuard separates **estimation**, **planning**, and **control** through a common trust interface.
+Localization confidence is estimated once and consumed throughout the autonomy pipeline rather than embedding fault handling inside every controller.
 
 ---
 
-## Engineering Decisions
+## Why TwinGuard?
 
-**Continuous trust instead of binary fault detection.**
-Residuals feed a continuously varying trust score. Mild degradation slows the drone down. Severe degradation triggers a hold or reroute. The response is proportional to the confidence in the data, not a threshold crossing.
+Most UAV autonomy stacks assume localization is always trustworthy.
 
-**Mission planning and safety remain independent.**
-The Behavior Tree decides what the UAV should try to do. The Offboard Supervisor decides whether that command actually reaches PX4. Those responsibilities live in separate code and cannot override each other — mission logic cannot bypass the safety gate.
+When GPS is spoofed, communication quality degrades, or state estimation becomes unreliable, planners continue making decisions using corrupted state estimates — or immediately trigger a failsafe.
 
-**One trust interface across the entire stack.**
-Every component — the supervisor, the BT leaves, both Nav2 plugins — reads from the same `trust_state` topic: trust score, residual, authority scale. Swapping the default integrity node for the EKF-fused version changes nothing downstream.
+TwinGuard follows a different philosophy.
 
-**Nav2 integration is additive.**
-TwinGuard extends Nav2 rather than replacing it. Localization confidence is exposed through a Behavior Tree condition and a custom costmap layer while existing planners, controllers, and recovery behaviors remain unchanged.
+Instead of treating integrity as a binary fault, **TwinGuard models localization confidence as a continuous runtime signal.**
+
+Residual-based trust estimation continuously adjusts the amount of authority given to autonomy components, allowing the vehicle to:
+
+- continue normal operation,
+- slow down,
+- reroute,
+- or hold position
+
+depending on confidence rather than a single threshold crossing.
 
 ---
+
+## System Pipeline
+
+```text
+PX4 VehicleOdometry
+          │
+          ▼
+Digital Twin Prediction
+          │
+Residual Computation
+          │
+Continuous Trust Estimation
+          │
+Trust State
+          │
+ ┌────────┴─────────┐
+ │                   │
+ ▼                   ▼
+BehaviorTree.CPP    Nav2 Plugins
+ │                   │
+ └────────┬──────────┘
+          ▼
+Offboard Supervisor
+          │
+Authority Scaling
+          │
+TrajectorySetpoint
+          │
+          ▼
+         PX4
+```
+
+---
+
 ## Packages
 
-| Package | Language | Responsibility |
-|---|---|---|
-| `twinguard_swarm_integrity_cpp` | C++ | Lightweight Digital twin prediction, integrity scoring, trust management, formation supervision, authority-gated offboard control |
-| `twinguard_swarm_planning_cpp` | C++ | BehaviorTree.CPP mission supervision, obstacle checking, local 3D A* planner |
-| `twinguard_swarm_estimation_cpp` | C++ | Sparse optical-flow visual odometry, 6-state EKF, EKF integrity pipeline |
-| `twinguard_swarm_nav2_cpp` | C++ | Nav2 BT condition plugin and localization-aware costmap layer |
-| `twinguard_dataset_replay` | Python | Dataset-driven degradation replay into live PX4 odometry |
-| `twinguard_swarm_bringup` | Python | Launch configurations for integrity, replay, EKF, single-UAV, and multi-UAV experiments |
+| Package | Responsibility |
+|---|---|
+| `twinguard_swarm_integrity_cpp` | Digital twin prediction, trust estimation, authority scaling, formation supervision, PX4 offboard interface |
+| `twinguard_swarm_planning_cpp` | BehaviorTree.CPP mission supervision and local A* planning |
+| `twinguard_swarm_estimation_cpp` | Visual odometry, 6-state Kalman filter, integrity estimation |
+| `twinguard_swarm_nav2_cpp` | Nav2 Behavior Tree condition and localization-aware costmap |
+| `twinguard_dataset_replay` | Dataset-driven localization degradation replay |
+| `twinguard_swarm_bringup` | Launch files and experiment orchestration |
 
 ---
-## Status
+
+## Engineering Highlights
+
+- Modular ROS 2 package architecture
+- PX4 SITL + Gazebo Harmonic integration
+- Continuous trust estimation instead of binary fault detection
+- Trust-aware offboard supervision
+- BehaviorTree.CPP mission supervision
+- Nav2 localization-aware extensions
+- Dataset replay for repeatable degradation scenarios
+- 6-state Kalman-based integrity estimation
+- Docker-based development environment
+- Fast DDS deployment support
+
+---
+
+## Validation
+
+TwinGuard has been validated using a reproducible ROS 2 workflow.
+
+### Build & CI
+
+- ✅ Ubuntu 24.04
+- ✅ ROS 2 Jazzy
+- ✅ Full colcon build
+- ✅ GitHub Actions CI
+- ✅ Automated package testing
+
+### Unit Testing
+
+GoogleTest coverage includes:
+
+- TrustScorer
+- Kalman Estimator
+- A* Planner
+
+### Integration Testing
+
+ROS 2 launch testing validates the integrity-supervisor pipeline:
+
+```text
+VehicleOdometry
+        ↓
+Integrity Node
+        ↓
+Trust State
+        ↓
+Offboard Supervisor
+        ↓
+Authority-scaled Commands
+```
+
+---
+
+## Repository Status
 
 | Component | Status |
-|---|:---:|
-| C++ integrity scoring + trust manager | ✅ |
-| Trust-gated offboard supervisor | ✅ |
-| BehaviorTree.CPP mission supervision | ✅ |
-| Local 3D A* rerouting | ✅ |
-| Real dataset replay validation | ✅ |
-| Sparse optical-flow visual odometry | ✅ |
-| 6-state EKF integrity pipeline | ✅ |
-| Nav2 BT condition plugin | ✅ |
-| Nav2 localization-aware costmap layer | ✅ |
-| Docker microservice deployment | ✅ |
-| Fast DDS Discovery Server | ✅ |
-| Full `colcon` build + Ubuntu/Jazzy validation | ⏳ Pending |
-| Multi-agent trajectory conflict monitoring | ⏳ Planned |
+|---|---|
+| Trust estimation | ✅ |
+| Offboard supervisor | ✅ |
+| BehaviorTree mission supervision | ✅ |
+| A* planner | ✅ |
+| Dataset replay | ✅ |
+| Visual odometry | ✅ |
+| Kalman estimator | ✅ |
+| Nav2 plugins | ✅ |
+| Docker environment | ✅ |
+| GitHub Actions CI | ✅ |
+| GoogleTest suite | ✅ |
+| ROS 2 integration tests | ✅ |
+| PX4 SITL demonstration | ✅ |
+| Multi-UAV conflict monitoring | 🚧 |
 
 ---
 
-## Simulation Fidelity
+## Documentation
 
-TwinGuard is validated in Gazebo using both live PX4 SITL and replayed localization degradation.
-
-The companion project **sim-val** measures the sensing fidelity gap between Gazebo and NVIDIA Isaac Sim RTX and evaluates how simulator fidelity affects TwinGuard's trust estimates. The resulting analysis is used to guide integrity threshold calibration.
-
----
-
-## Docs
-
-[Architecture](docs/architecture.md) · [Topic Contract](docs/topic_contract.md) · [Quickstart](docs/quickstart.md) · [Deployment](docs/deployment.md) · [Dataset Replay](docs/real_dataset_replay.md)
+- [Architecture](docs/architecture.md)
+- [Topic Contract](docs/topic-contract.md)
+- [Quickstart](docs/quickstart.md)
+- [Deployment](docs/deployment.md)
+- [Dataset Replay](docs/dataset-replay.md)
 
 ---
 
-> **TwinGuard treats localization integrity as a shared system signal rather than a standalone fault detector, allowing estimation, planning, and control to adapt together as confidence changes.**
+## Companion Project
+
+The companion project **SimBEL** evaluates simulator fidelity across Gazebo and NVIDIA Isaac Sim and studies how simulation fidelity affects TwinGuard's localization integrity estimation.
+
+TwinGuard treats localization integrity as a shared runtime signal, allowing estimation, planning, and control to adapt together rather than reacting independently to degraded localization.
