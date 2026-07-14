@@ -96,7 +96,7 @@ TwinGuard is validated using PX4 SITL and Gazebo by injecting localization degra
 ### Trust-aware supervisory response
 
 <p align="center">
-<img src="docs/images/trust_authority_response.png" width="900" alt="Trust-aware supervisory response"/>
+<img src="docs/images/validation_trust_response.png" width="900" alt="Trust-aware supervisory response"/>
 </p>
 
 During nominal operation, trust remains high and the supervisor allows full authority. When localization integrity degrades, trust drops rapidly, authority is reduced to a configurable floor, and the supervisor transitions into **degraded-hold** mode to prevent unsafe control commands.
@@ -106,7 +106,7 @@ During nominal operation, trust remains high and the supervisor allows full auth
 ### Residual-driven trust collapse
 
 <p align="center">
-<img src="docs/images/residual_vs_trust.png" width="900" alt="Residual-driven trust collapse"/>
+<img src="docs/images/validation_residual_response.png" width="900" alt="Residual-driven trust collapse"/>
 </p>
 
 Localization residuals remain low during normal operation. When degraded localization is introduced, residuals increase sharply, causing the trust estimator to reduce confidence before corrupted state estimates propagate through planning and control.
