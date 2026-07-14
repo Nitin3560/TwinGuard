@@ -13,14 +13,12 @@
 
 ---
 
-## Demo
+## 🎥 Demo
 
 <p align="center">
 <b>End-to-end PX4 SITL demonstration showing nominal operation, localization degradation, trust-aware supervision, and recovery.</b>
 <br><br>
-<h2>🎥 Demo</h2>
-
-<img src="docs/demo.gif" width="900" alt="TwinGuard Demo">
+          ![TwinGuard Demo](docs/demo.gif)
 </p>
 
 ---
