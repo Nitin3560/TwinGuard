@@ -19,7 +19,9 @@
 <b>End-to-end PX4 SITL demonstration showing nominal operation, localization degradation, trust-aware supervision, and recovery.</b>
 </p>
 
-[TwinGuard Demo](docs/demo.gif)
+<p align="center">
+  <img src="docs/demo-small.gif" width="820" alt="TwinGuard Demo">
+</p>
 
 ---
 
