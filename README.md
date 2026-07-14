@@ -214,7 +214,7 @@ Authority-scaled Commands
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Design DOC](docs/design_doc.md)
+- [Design DOC](docs/Design_doc.md)
 - [Topic Contract](docs/topic-contract.md)
 - [Quickstart](docs/quickstart.md)
 - [Deployment](docs/deployment.md)
