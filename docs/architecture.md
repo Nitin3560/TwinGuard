@@ -1,18 +1,14 @@
 # TwinGuard Architecture
 
-When I started building TwinGuard, I wasn't trying to build another PX4 simulation or another ROS 2 package. My goal was much simpler.
+TwinGuard is a trust-aware autonomy framework built on ROS 2, PX4 SITL, and Gazebo for improving the resilience of UAV autonomy when localization becomes unreliable.
 
-I wanted to answer one question:
+Rather than treating localization integrity as an isolated fault-detection problem, TwinGuard integrates localization confidence directly into the autonomy pipeline. Every major subsystem—including planning, supervision, navigation, and control—adapts its behavior using a shared trust estimate derived from live vehicle state.
 
-> **What should an autonomous UAV do when it no longer completely trusts its own localization?**
+The architecture was designed around one central question:
 
-Most autonomy stacks assume the estimated vehicle state is correct. Once GPS is spoofed, communication quality drops, or sensor measurements become inconsistent, planners and controllers continue making decisions from increasingly unreliable information. In many systems, the only alternative is an emergency failsafe.
+> **How should an autonomous UAV behave when it no longer completely trusts its own localization?**
 
-I wanted to explore a different approach.
-
-Instead of treating integrity as a binary decision, I wanted every autonomy component to continuously know **how trustworthy the current state estimate is** and adapt its behavior accordingly.
-
-That idea became the foundation of TwinGuard.
+Instead of responding to degraded localization with a binary failsafe, TwinGuard continuously estimates localization integrity and proportionally adjusts vehicle behavior. This allows autonomy to degrade gracefully rather than abruptly terminating a mission whenever localization quality decreases.
 
 ---
 
@@ -20,264 +16,322 @@ That idea became the foundation of TwinGuard.
 
 ![TwinGuard Architecture](architecture.png)
 
-While designing the system, one principle guided almost every architectural decision:
+TwinGuard separates estimation, planning, supervision, and control into independent components connected through a shared runtime interface.
 
-> **Estimate integrity once, then let every subsystem use it.**
+Rather than allowing each subsystem to estimate localization quality independently, the integrity pipeline computes trust once and publishes a common `trust_state` interface that every downstream component consumes.
 
-I didn't want planning, control, and navigation to estimate localization quality independently. If each package computed its own confidence, they would eventually disagree with one another, making the system difficult to reason about and even harder to maintain.
+This architecture provides three important benefits:
 
-Instead, TwinGuard computes trust once inside the integrity pipeline and publishes a shared interface that every downstream component consumes.
-
-This keeps estimation, planning, supervision, and navigation independent while ensuring they all make decisions using the same integrity information.
+- Every subsystem makes decisions using the same integrity estimate.
+- Individual components remain loosely coupled and independently replaceable.
+- New estimators or planners can be introduced without modifying the rest of the autonomy stack.
 
 ---
 
-# Overall Runtime
+# Design Principles
 
-The runtime is organized into five logical stages.
+Several principles guided the overall architecture.
+
+### Estimate integrity once
+
+Localization confidence is estimated inside a dedicated integrity pipeline rather than separately by planners, controllers, or navigation modules. This prevents inconsistent confidence estimates across the system.
+
+### Publish a shared trust interface
+
+Every downstream component consumes the same `trust_state` message instead of computing its own integrity estimate.
+
+### Separate mission planning from safety
+
+Mission logic determines what the vehicle should attempt to do, while a dedicated supervisor determines whether those commands are safe to execute.
+
+### Keep subsystems loosely coupled
+
+Each subsystem performs one responsibility while communicating only through well-defined ROS 2 interfaces.
+
+### Extend existing autonomy software
+
+TwinGuard extends PX4, Nav2, and ROS 2 rather than replacing their existing capabilities.
+
+---
+
+# Runtime Overview
+
+Each control cycle follows the same execution sequence.
 
 1. PX4 SITL and Gazebo generate the simulated vehicle state.
-2. The ROS 2 bridge exposes PX4 topics to the autonomy stack.
-3. TwinGuard evaluates localization integrity and mission decisions.
-4. The Offboard Supervisor applies the final authority gate.
-5. PX4 and Nav2 consume the resulting outputs.
+2. The ROS 2 bridge exposes PX4 telemetry to the autonomy runtime.
+3. TwinGuard evaluates localization integrity.
+4. Mission planning and navigation consume the shared trust estimate.
+5. The Offboard Supervisor applies the final authority gate.
+6. Authority-scaled commands are transmitted back to PX4.
 
-Every iteration begins with new vehicle state coming from PX4.
+Every iteration begins with new vehicle state arriving from PX4.
 
-The runtime never feeds its outputs back into the integrity estimator. Instead, every control cycle starts from fresh sensor information and repeats the same evaluation process.
+The runtime does not form a feedback loop from planner outputs back into the integrity estimator. Every control cycle starts with fresh vehicle observations, ensuring that localization integrity is always evaluated using current sensor information rather than previous control decisions.
 
 ---
 
-# Why I Built the Integrity Node First
+# Integrity Estimation Pipeline
 
-The integrity node became the first component I implemented because every other decision in the autonomy stack depends on it.
+The integrity pipeline forms the foundation of the TwinGuard architecture.
 
-Before thinking about planners or controllers, I needed a reliable way to estimate whether the vehicle's localization could actually be trusted.
+Its responsibility is to determine how trustworthy the current localization estimate is before any planning or control decisions are made.
 
-The node receives live PX4 vehicle odometry and compares it against a predicted state generated by a lightweight digital twin.
+The pipeline receives live PX4 vehicle odometry and compares it against a lightweight model-based state prediction.
 
-The difference between those two states becomes the residual.
+The difference between predicted and measured vehicle state forms a residual that is continuously evaluated over time.
 
-That residual is then converted into a continuously varying trust score together with an authority scale that represents how much control the UAV should currently receive.
+Rather than generating a binary fault decision, TwinGuard converts this residual into two runtime quantities:
 
-I deliberately avoided publishing multiple integrity messages.
+- Trust score
+- Authority scale
 
-Instead, the node publishes one shared interface:
+The trust score represents confidence in the current localization estimate.
 
-```
+The authority scale represents how much control authority should be granted to downstream autonomy components.
+
+These values are continuously updated throughout flight, allowing gradual adaptation instead of abrupt transitions between normal operation and emergency failsafe behavior.
+
+---
+
+# Model-Based State Prediction
+
+TwinGuard intentionally uses a lightweight constant-velocity prediction model instead of a computationally expensive vehicle dynamics simulation.
+
+The objective of the predictor is not to perfectly model UAV dynamics.
+
+Its purpose is to provide a stable reference against which incoming localization measurements can be evaluated.
+
+A lightweight prediction model offers several advantages:
+
+- deterministic execution,
+- predictable runtime,
+- minimal computational overhead,
+- stable residual generation suitable for continuous trust estimation.
+
+This makes it significantly more practical for real-time integrity estimation than a complex physics model while still providing sufficient information for residual analysis.
+
+---
+
+# Shared Trust Interface
+
+One of the central architectural abstractions in TwinGuard is the shared runtime interface:
+
+```text
 trust_state
 ```
 
-Every other subsystem reads this topic instead of computing its own estimate.
+Rather than publishing multiple integrity messages for different subsystems, TwinGuard publishes a single message that represents the current localization confidence.
 
-Looking back, I think this became the most important architectural decision in the entire project.
+The message contains information including:
 
----
-
-# Why I Chose a Lightweight Digital Twin
-
-One obvious direction would have been building a sophisticated vehicle dynamics model.
-
-I intentionally decided not to do that.
-
-The purpose of the digital twin is not perfect prediction.
-
-Its job is to generate stable residuals that can be evaluated continuously in real time.
-
-A lightweight constant-velocity predictor is deterministic, computationally inexpensive, and produces residuals that are consistent enough for trust estimation without introducing unnecessary model complexity.
-
-That made it a much better fit for the architecture than a larger physics model.
-
----
-
-# The Shared Trust Interface
-
-Once the integrity pipeline was working, I needed a way for every package to consume the same information without becoming tightly coupled.
-
-Instead of creating separate interfaces for planning, supervision, and navigation, I introduced a single shared message.
-
-```
-trust_state
-```
-
-Rather than representing a fault, this message represents the current confidence in the vehicle state.
+- localization trust,
+- residual magnitude,
+- authority scaling,
+- fault classification.
 
 Every major subsystem consumes this interface.
 
-That means planning, supervision, and navigation always agree on the current integrity estimate because they are all using exactly the same source of truth.
+This includes:
 
-It also means I can improve or replace the integrity estimator without changing any downstream packages.
+- BehaviorTree mission supervision,
+- Offboard Supervisor,
+- Nav2 plugins,
+- formation supervision,
+- optional integrity estimators.
 
----
+Because every subsystem relies on the same runtime interface, localization confidence remains consistent throughout the autonomy stack.
 
-# Why Mission Planning and Safety Are Separate
+The integrity estimator can therefore evolve independently without requiring modifications to planners, controllers, navigation components, or supervisory logic.
 
-One of the biggest design decisions was separating mission planning from safety enforcement.
+This separation between estimation and consumption became one of the defining architectural decisions within TwinGuard.
 
-Initially it would have been easy to let the Behavior Tree publish PX4 commands directly.
+# Mission Planning and Safety
 
-The more I worked on the architecture, the more I realized that doing so would allow planning logic to bypass integrity constraints.
+A fundamental architectural decision in TwinGuard is the separation of mission planning from safety enforcement.
 
-Instead, I split those responsibilities.
+Mission planning determines **what the UAV should attempt to do**, while safety enforcement determines **whether those commands should actually be executed**.
 
-The Behavior Tree decides **what the UAV should try to do**.
+Although combining these responsibilities inside a single node would simplify implementation, it would also allow mission logic to bypass localization integrity constraints.
 
-The Offboard Supervisor decides **whether that command should actually reach PX4**.
+TwinGuard avoids this by separating responsibilities into independent runtime components.
 
-Every command passes through the supervisor before being published.
+The BehaviorTree.CPP mission supervisor is responsible for high-level mission execution, waypoint sequencing, task selection, and recovery logic.
 
-This keeps safety enforcement independent from mission logic and makes the behavior of the system much easier to understand.
+The Offboard Supervisor remains responsible for evaluating the current authority scale before any PX4 command is transmitted.
+
+Every offboard command passes through the supervisor regardless of its origin.
+
+This separation ensures that mission execution cannot override integrity constraints while allowing both systems to evolve independently.
 
 ---
 
 # Formation Supervisor
 
-The formation supervisor became the central coordinator for runtime decision making.
+The Formation Supervisor acts as the final decision layer before PX4 receives control commands.
 
-Rather than implementing integrity itself, it consumes the published trust estimate and combines it with mission planning.
+Rather than estimating localization quality itself, it consumes the published `trust_state` interface together with mission intent produced by the Behavior Tree.
 
 Its responsibilities include:
 
-- Executing the Behavior Tree
-- Managing local A* replanning
-- Scaling vehicle authority
-- Publishing PX4 offboard messages
+- BehaviorTree execution
+- Local A* replanning
+- Authority scaling
+- PX4 offboard command publication
+- Formation supervision
 
-Keeping these responsibilities together allows mission execution to remain separate from integrity estimation while still responding immediately to changes in localization confidence.
+By combining these responsibilities inside a single supervisory layer, TwinGuard maintains a clear separation between estimation and execution.
 
-# Why I Added an Optional EKF Pipeline
+Localization confidence influences mission execution without requiring planners or controllers to implement integrity estimation themselves.
 
-Once the default integrity pipeline was working, I started thinking about how additional sensing could improve localization confidence.
+---
 
-Rather than replacing the existing architecture, I wanted the EKF to become another estimator that could plug into the same system.
+# Kalman-Based Integrity Estimation
 
-The EKF fuses three different sources of information:
+TwinGuard includes an optional Kalman-based integrity pipeline that extends the default residual-based estimator without changing the overall system architecture.
 
-- PX4 position odometry
+The estimator fuses multiple sensing modalities including:
+
+- PX4 vehicle odometry
 - Sparse optical-flow visual odometry
-- Depth-scaled motion estimates
+- Depth-scaled motion estimation
 
-One design choice I particularly liked was avoiding a simple accept-or-reject strategy for visual odometry.
+Rather than replacing the existing integrity pipeline, the Kalman estimator publishes exactly the same `trust_state` interface.
 
-Instead, image quality directly affects measurement uncertainty.
+Every downstream component therefore continues operating without modification.
 
-When feature tracking becomes unreliable, the EKF automatically reduces the influence of those measurements instead of discarding them entirely.
+One important design decision concerns visual odometry quality.
 
-More importantly, the EKF publishes exactly the same `trust_state` interface as the default integrity node.
+Instead of accepting or rejecting visual measurements using a fixed threshold, TwinGuard adjusts measurement uncertainty according to tracking quality.
 
-Because every downstream component already consumes that interface, switching estimators requires no changes anywhere else in the runtime.
+When feature tracking deteriorates, visual measurements contribute less to the state estimate instead of being discarded entirely.
 
-That confirmed that keeping the architecture loosely coupled was the right decision.
+This produces smoother transitions while maintaining estimator stability during periods of degraded visual information.
 
----
-
-# Why I Integrated Nav2 Instead of Replacing It
-
-I never wanted TwinGuard to become another navigation framework.
-
-Nav2 already provides mature planners, controllers, and recovery behaviors.
-
-Instead of replacing that work, I wanted integrity to become another input that Nav2 could understand.
-
-That led to two small integrations.
-
-The first is a Behavior Tree condition that allows navigation logic to react to localization confidence.
-
-The second is a custom costmap layer.
-
-Unlike traditional costmap layers that represent external obstacles, this layer represents uncertainty around the robot's own estimated position.
-
-As localization confidence decreases, the robot becomes more conservative without modifying Nav2's planners or controllers.
-
-That was exactly the outcome I wanted.
-
-TwinGuard extends Nav2 instead of competing with it.
+Because both integrity estimators expose the same runtime interface, switching between them requires only launch-time configuration rather than architectural changes.
 
 ---
 
-# Why I Built Dataset Replay
+# Nav2 Integration
 
-Simulation is incredibly useful, but I didn't want to evaluate the integrity pipeline only under synthetic failures.
+TwinGuard is designed to complement existing autonomy software rather than replace it.
 
-I wanted to observe how the architecture behaved under realistic localization degradation.
+Nav2 already provides mature planning, control, recovery, and navigation capabilities.
 
-Instead of replaying complete trajectories, I inject controlled localization perturbations into live PX4 odometry using measurements derived from real datasets.
+Instead of introducing another navigation framework, TwinGuard extends Nav2 by exposing localization confidence as an additional runtime input.
 
-The rest of the autonomy stack continues running normally.
+Two integrations are provided.
 
-From the perspective of the integrity pipeline, it behaves exactly like a live vehicle experiencing degraded localization.
+### Behavior Tree Condition
 
-This made validation repeatable while keeping the runtime architecture unchanged.
+A custom Nav2 Behavior Tree condition allows navigation logic to react directly to localization confidence.
+
+Mission execution can therefore adapt automatically when localization integrity decreases.
+
+### Localization-Aware Costmap Layer
+
+TwinGuard also provides a custom costmap layer representing localization uncertainty rather than physical obstacles.
+
+As confidence decreases, navigation behavior becomes progressively more conservative without modifying Nav2 planners or controllers.
+
+This allows existing navigation algorithms to remain unchanged while still responding to degraded localization conditions.
+
+TwinGuard therefore extends Nav2 instead of competing with it.
 
 ---
 
-# Why I Chose a Modular Deployment
+# Dataset Replay
 
-As the project grew, running everything inside a single ROS environment became increasingly difficult to manage.
+Simulation provides a controlled environment for testing autonomy systems, but realistic localization degradation is difficult to reproduce using synthetic failures alone.
 
-Different components had different responsibilities.
+TwinGuard addresses this through dataset replay.
 
-PX4 should remain independent from the autonomy runtime.
+Instead of replaying complete vehicle trajectories, controlled localization perturbations derived from real datasets are injected directly into live PX4 odometry.
 
-Nav2 should remain independent from integrity estimation.
+From the perspective of the integrity pipeline, the replayed data is indistinguishable from live sensor information.
 
-Logging should never affect flight execution.
+The remainder of the autonomy stack continues operating normally.
 
-That naturally led to a microservice architecture.
+This approach provides:
 
-The project is separated into:
+- repeatable experiments,
+- controlled degradation scenarios,
+- realistic localization disturbances,
+- identical runtime behavior between replay and live simulation.
+
+Because replay occurs only at the localization interface, the overall system architecture remains unchanged.
+
+---
+
+# Modular Deployment
+
+As TwinGuard expanded, separating responsibilities into independent runtime services became increasingly important.
+
+Rather than executing the entire autonomy stack inside a single ROS environment, the system is deployed as several loosely coupled services.
+
+Typical deployment consists of:
 
 - PX4 SITL
+- Gazebo simulation
 - ROS 2 autonomy runtime
 - Nav2
+- Dataset replay
 - Experiment logging
 
-These services communicate through a Fast DDS Discovery Server.
+Communication between services is coordinated through a Fast DDS Discovery Server.
 
-Separating them made development easier, reduced coupling, and allowed individual components to be restarted without affecting the rest of the system.
+This architecture improves maintainability by allowing individual components to be restarted, updated, or replaced independently while minimizing coupling between runtime services.
 
----
-
-# How Everything Fits Together
-
-Looking back, I don't think the most important part of TwinGuard is the digital twin, the EKF, or even the Behavior Tree.
-
-The most important decision was keeping every subsystem focused on one responsibility while allowing all of them to communicate through a shared trust interface.
-
-The integrity node estimates confidence.
-
-The Behavior Tree decides mission intent.
-
-The Offboard Supervisor enforces safety.
-
-Nav2 adapts navigation.
-
-Each component performs one job, but they all make decisions using the same understanding of localization integrity.
-
-That consistency is what makes the architecture scalable and easy to extend.
+It also mirrors deployment strategies commonly used in larger robotics software systems.
 
 ---
 
 # Extending the Architecture
 
-One of my goals while building TwinGuard was making future extensions require as little architectural change as possible.
+One of the primary goals during development was minimizing architectural changes when introducing new functionality.
 
-For example, replacing the integrity estimator does not require changing the planner.
+Because subsystems communicate exclusively through well-defined ROS 2 interfaces, future extensions generally require adding new components rather than modifying existing ones.
 
-Adding a different planner does not require modifying the supervisor.
+Examples include:
 
-Additional navigation components can subscribe to `trust_state` without affecting the integrity pipeline.
+- replacing the integrity estimator,
+- introducing additional planners,
+- integrating alternative localization sources,
+- extending Nav2 functionality,
+- supporting additional UAV platforms.
 
-Because every subsystem communicates through well-defined interfaces, most future work can be added as new components rather than modifications to existing ones.
+As long as new components consume or publish the existing runtime interfaces, they integrate naturally into the existing architecture.
+
+This significantly improves scalability while reducing long-term maintenance complexity.
 
 ---
 
-# Closing Thoughts
+# Architectural Summary
 
-Building TwinGuard taught me that resilient autonomy is less about detecting failures and more about deciding what to do after detection.
+TwinGuard is organized around a simple principle:
 
-The algorithms themselves are important, but the architecture determines whether those algorithms remain maintainable as the system grows.
+> **Estimate localization integrity once, then allow every autonomy component to use that information consistently.**
 
-By separating estimation, planning, supervision, and control while connecting them through a single trust interface, I ended up with an architecture that is easier to understand, easier to validate, and much easier to extend than the one I originally imagined.
+The integrity pipeline estimates localization confidence.
 
-That design philosophy now guides every new feature I add to TwinGuard.
+The Behavior Tree determines mission intent.
+
+The Offboard Supervisor enforces authority constraints.
+
+Nav2 adapts navigation behavior.
+
+Each subsystem performs one well-defined responsibility while remaining loosely coupled from the rest of the autonomy stack.
+
+This separation allows estimation, planning, supervision, and navigation to evolve independently while maintaining a consistent understanding of localization integrity throughout the system.
+
+---
+
+# Closing Remarks
+
+TwinGuard demonstrates that resilient autonomy depends not only on detecting degraded localization, but also on making appropriate decisions after degradation has been identified.
+
+Rather than treating integrity as an isolated fault-detection problem, the architecture promotes localization confidence to a shared runtime signal consumed throughout the autonomy stack.
+
+By separating estimation, planning, supervision, and control while connecting them through a common trust interface, TwinGuard provides an architecture that is modular, extensible, and significantly easier to validate than tightly coupled autonomy systems.
+
+This design philosophy guides every subsystem within TwinGuard and provides a foundation for future extensions involving additional estimators, planners, navigation frameworks, and multi-UAV coordination.
