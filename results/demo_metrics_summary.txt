@@ -1,0 +1,10 @@
+TwinGuard demo metrics summary
+Rows: 502
+Time span: 0.08s to 50.77s
+Max trust: 0.952864
+Min trust: 0.000032
+Max residual: 9.941091 m
+Min authority: 0.150000
+Degraded/attack window: 34.67s to 50.77s
+Nominal samples: 340
+Degraded-hold/attack samples: 160
