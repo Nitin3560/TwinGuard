@@ -212,6 +212,6 @@ Authority-scaled Commands
 
 ## Companion Project
 
-The companion project **SimBEL** evaluates simulator fidelity across Gazebo and NVIDIA Isaac Sim and studies how simulation fidelity affects TwinGuard's localization integrity estimation.
+The companion project **sim-val** evaluates simulator fidelity across Gazebo and NVIDIA Isaac Sim and studies how simulation fidelity affects TwinGuard's localization integrity estimation.
 
 > **TwinGuard treats localization integrity as a shared runtime signal, allowing estimation, planning, and control to adapt together rather than reacting independently to degraded localization.**
