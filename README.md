@@ -206,7 +206,6 @@ Authority-scaled Commands
 - [Topic Contract](docs/topic-contract.md)
 - [Quickstart](docs/quickstart.md)
 - [Deployment](docs/deployment.md)
-- [Dataset Replay](docs/dataset-replay.md)
 
 ---
 
