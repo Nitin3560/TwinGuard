@@ -105,6 +105,10 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_authority_aggregator test/test_authority_aggregator.cpp)
   target_link_libraries(test_authority_aggregator twinguard_integrity_core)
+
+  ament_add_gtest(test_offboard_supervisor_state_machine
+    test/test_offboard_supervisor_state_machine.cpp)
+  target_link_libraries(test_offboard_supervisor_state_machine twinguard_integrity_core)
 endif()
 
 ament_package()
