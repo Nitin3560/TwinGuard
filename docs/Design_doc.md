@@ -137,6 +137,45 @@ That greatly simplified both debugging and future development.
 
 ---
 
+# Why I Added Explicit Authority States
+
+The first version of the supervisor scaled commands directly from the authority value.
+
+That was useful, but it still left an important ambiguity.
+
+The same authority value can mean two different things depending on context.
+
+A UAV may be operating steadily under moderate degradation.
+
+It may also be recovering from a recent hold.
+
+Those cases should not be treated identically.
+
+I added an explicit supervisor state machine to make that distinction visible.
+
+The supervisor now separates:
+
+- target authority,
+- applied authority,
+- supervisor state,
+- operation context.
+
+Target authority represents what the integrity model wants immediately.
+
+Applied authority is conditioned over time so authority can fall quickly but recover slowly.
+
+The state machine then decides whether the UAV should continue normally, continue cautiously, or hold position.
+
+This made the supervisor easier to reason about because transitions are no longer hidden inside one continuous scale value.
+
+It also made validation cleaner.
+
+I can now test that noisy thresholds do not chatter, hard safety faults bypass dwell timers, and recovery cannot occur before the configured dwell time has elapsed.
+
+That is closer to how I would want this logic to behave in a real autonomy stack.
+
+---
+
 # Why Everything Uses `trust_state`
 
 As more packages were added, another problem slowly appeared.

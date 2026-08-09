@@ -215,10 +215,60 @@ geometry_msgs/msg/PointStamped
 contract, where
 
 ```text
+point.x = trust
+point.y = residual
 point.z = authority_scale
 ```
 
 No additional Nav2-specific TwinGuard topics are introduced.
+
+The `authority_scale` field remains backward compatible for downstream consumers.
+
+Newer supervisor logic reads richer authority diagnostics from `integrity_diagnostics` when available, but existing nodes that only subscribe to `trust_state` continue to receive the applied authority in `point.z`.
+
+---
+
+# Authority Diagnostics
+
+The integrity and supervisor diagnostics expose the values used by the authority state machine.
+
+## Integrity Diagnostics
+
+```text
+target_authority
+applied_authority
+active_limiting_factor
+hard_override_active
+operation_context
+```
+
+`target_authority` is the immediate authority requested by the integrity model.
+
+`applied_authority` is the temporally conditioned authority used by downstream control logic.
+
+`active_limiting_factor` identifies whether estimation, communication, battery, proximity, or a hard safety override limited authority.
+
+## Supervisor Diagnostics
+
+```text
+target_authority
+applied_authority
+commanded_authority
+operation_context
+hold
+mission_paused
+hard_override_active
+```
+
+The supervisor publishes one of three runtime states in the diagnostic status message:
+
+```text
+nominal
+limited_operation
+degraded_hold
+```
+
+`operation_context` distinguishes normal operation, steady degraded operation, and recovery after a hold.
 
 ---
 
@@ -248,6 +298,12 @@ residual
 trust
 
 authority_scale
+
+target_authority
+
+applied_authority
+
+operation_context
 
 fault_active
 

@@ -27,6 +27,7 @@
 
 - Continuous localization trust estimation
 - Trust-aware offboard supervision
+- Authority state machine with nominal, limited-operation, and degraded-hold modes
 - BehaviorTree.CPP mission execution
 - Nav2 localization-aware planning
 - PX4 SITL + Gazebo integration
@@ -77,7 +78,9 @@ Residual Computation
           │
 Continuous Trust Estimation
           │
-Trust State
+Authority Aggregation
+          │
+Trust State + Diagnostics
           │
  ┌────────┴─────────┐
  │                   │
@@ -88,7 +91,7 @@ BehaviorTree.CPP    Nav2 Plugins
           ▼
 Offboard Supervisor
           │
-Authority Scaling
+State-Gated Authority Scaling
           │
 TrajectorySetpoint
           │
@@ -109,7 +112,7 @@ TwinGuard is validated using PX4 SITL and Gazebo by injecting localization degra
 <img src="docs/images/validation_trust_response.png" width="900" alt="Trust-aware supervisory response"/>
 </p>
 
-During nominal operation, trust remains high and the supervisor allows full authority. When localization integrity degrades, trust drops rapidly, authority is reduced to a configurable floor, and the supervisor transitions into **degraded-hold** mode to prevent unsafe control commands.
+During nominal operation, trust remains high and the supervisor allows full authority. When localization integrity degrades, TwinGuard separates target authority from applied authority, then moves through explicit supervisor states: **nominal**, **limited-operation**, and **degraded-hold**. This allows cautious continuation during moderate degradation while still forcing a hold when authority reaches the safety floor or a hard override is active.
 
 ---
 
@@ -126,7 +129,7 @@ Localization residuals remain low during normal operation. When degraded localiz
 
 | Package | Responsibility |
 |---|---|
-| `twinguard_swarm_integrity_cpp` | State prediction, trust estimation, authority scaling, formation supervision, PX4 offboard interface |
+| `twinguard_swarm_integrity_cpp` | State prediction, trust estimation, authority aggregation, supervisor state machine, PX4 offboard interface |
 | `twinguard_swarm_planning_cpp` | BehaviorTree.CPP mission supervision and local A* planning |
 | `twinguard_swarm_estimation_cpp` | Visual odometry, 6-state Kalman filter, integrity estimation |
 | `twinguard_swarm_nav2_cpp` | Nav2 Behavior Tree condition and localization-aware costmap |
@@ -140,7 +143,7 @@ Localization residuals remain low during normal operation. When degraded localiz
 • Modular ROS 2 package architecture
 • PX4 SITL + Gazebo Harmonic integration
 • Continuous trust estimation
-• Trust-aware offboard supervision
+• Trust-aware offboard supervision with authority states
 • BehaviorTree.CPP mission supervision
 • Nav2 localization-aware plugins
 • Dataset replay for repeatable degradation scenarios
@@ -169,6 +172,10 @@ TwinGuard has been validated using a reproducible ROS 2 workflow.
 GoogleTest coverage includes:
 
 - TrustScorer
+- HardSafetyMonitor
+- EstimationAuthorityModel
+- AuthorityAggregator
+- OffboardSupervisor state machine
 - Kalman Estimator
 - A* Planner
 

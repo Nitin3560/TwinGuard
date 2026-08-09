@@ -62,8 +62,9 @@ Each control cycle follows the same execution sequence.
 2. The ROS 2 bridge exposes PX4 telemetry to the autonomy runtime.
 3. TwinGuard evaluates localization integrity.
 4. Mission planning and navigation consume the shared trust estimate.
-5. The Offboard Supervisor applies the final authority gate.
-6. Authority-scaled commands are transmitted back to PX4.
+5. The authority model combines estimation, communication, battery, and proximity factors.
+6. The Offboard Supervisor applies the final authority gate.
+7. Authority-scaled commands are transmitted back to PX4.
 
 Every iteration begins with new vehicle state arriving from PX4.
 
@@ -81,14 +82,21 @@ The pipeline receives live PX4 vehicle odometry and compares it against a lightw
 
 The difference between predicted and measured vehicle state forms a residual that is continuously evaluated over time.
 
-Rather than generating a binary fault decision, TwinGuard converts this residual into two runtime quantities:
+Rather than generating a binary fault decision, TwinGuard converts residual, estimator health, freshness, and sensor availability into runtime authority signals.
 
-- Trust score
-- Authority scale
+The primary values are:
+
+- trust score,
+- target authority,
+- applied authority,
+- limiting factor,
+- operation context.
 
 The trust score represents confidence in the current localization estimate.
 
-The authority scale represents how much control authority should be granted to downstream autonomy components.
+Target authority represents what the integrity model believes the vehicle should be allowed to do immediately.
+
+Applied authority is temporally conditioned so authority drops quickly but recovers slowly.
 
 These values are continuously updated throughout flight, allowing gradual adaptation instead of abrupt transitions between normal operation and emergency failsafe behavior.
 
@@ -170,19 +178,35 @@ This separation ensures that mission execution cannot override integrity constra
 
 The Formation Supervisor acts as the final decision layer before PX4 receives control commands.
 
-Rather than estimating localization quality itself, it consumes the published `trust_state` interface together with mission intent produced by the Behavior Tree.
+Rather than estimating localization quality itself, it consumes the published `trust_state` interface, integrity diagnostics, and mission intent produced by the Behavior Tree.
 
 Its responsibilities include:
 
 - BehaviorTree execution
 - Local A* replanning
-- Authority scaling
+- Authority state transitions
 - PX4 offboard command publication
 - Formation supervision
 
 By combining these responsibilities inside a single supervisory layer, TwinGuard maintains a clear separation between estimation and execution.
 
 Localization confidence influences mission execution without requiring planners or controllers to implement integrity estimation themselves.
+
+The supervisor uses three runtime states.
+
+```text
+NOMINAL
+LIMITED_OPERATION
+DEGRADED_HOLD
+```
+
+In nominal mode, mission commands are published normally.
+
+In limited operation, the mission continues cautiously while velocity and command authority are scaled by the applied authority value.
+
+In degraded hold, mission progression is suspended and the vehicle holds the current safe point until authority recovers for a configured dwell time.
+
+The supervisor also publishes an operation context so downstream tools can distinguish steady degraded operation from recovery after a hold, even when the authority value is the same.
 
 ---
 
