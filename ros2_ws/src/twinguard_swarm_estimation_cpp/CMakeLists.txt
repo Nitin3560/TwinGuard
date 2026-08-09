@@ -26,6 +26,7 @@ endif()
 include_directories(include)
 
 add_library(twinguard_estimation_core
+  src/estimation_authority_model.cpp
   src/ekf_estimator.cpp
   src/visual_odometry.cpp
 )
