@@ -24,6 +24,7 @@ endif()
 include_directories(include)
 
 add_library(twinguard_integrity_core
+  src/authority_aggregator.cpp
   src/hard_safety_monitor.cpp
   src/trust_scorer.cpp
   src/offboard_supervisor.cpp
