@@ -102,6 +102,9 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_hard_safety_monitor test/test_hard_safety_monitor.cpp)
   target_link_libraries(test_hard_safety_monitor twinguard_integrity_core)
+
+  ament_add_gtest(test_authority_aggregator test/test_authority_aggregator.cpp)
+  target_link_libraries(test_authority_aggregator twinguard_integrity_core)
 endif()
 
 ament_package()
