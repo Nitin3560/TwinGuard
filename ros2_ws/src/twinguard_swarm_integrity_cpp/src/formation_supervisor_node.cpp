@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <string>
@@ -44,6 +45,12 @@ public:
     nominal_velocity_limit_ = declare_parameter<double>("nominal_velocity_limit_mps", 3.0);
     degraded_threshold_ = declare_parameter<double>("degraded_threshold", 0.5);
     min_authority_scale_ = declare_parameter<double>("min_authority_scale", 0.15);
+    SupervisorThresholds thresholds;
+    thresholds.nominal_exit_threshold = declare_parameter<double>("nominal_exit_threshold", 0.75);
+    thresholds.nominal_enter_threshold = declare_parameter<double>("nominal_enter_threshold", 0.85);
+    thresholds.hold_threshold = declare_parameter<double>("hold_threshold", 0.25);
+    thresholds.hold_exit_threshold = declare_parameter<double>("hold_exit_threshold", 0.45);
+    thresholds.transition_dwell_s = declare_parameter<double>("transition_dwell_s", 1.0);
     stale_timeout_ms_ = declare_parameter<int>("stale_timeout_ms", 500);
     auto_arm_ = declare_parameter<bool>("auto_arm", false);
     force_arm_ = declare_parameter<bool>("force_arm", false);
@@ -76,7 +83,7 @@ public:
     twinguard::planning::registerTwinGuardBtNodes(factory);
     bt_tree_ = std::make_unique<BT::Tree>(factory.createTreeFromFile(tree_path, bt_blackboard_));
 
-    supervisor_ = OffboardSupervisor(nominal_velocity_limit_, degraded_threshold_);
+    supervisor_ = OffboardSupervisor(nominal_velocity_limit_, degraded_threshold_, thresholds);
 
     offboard_mode_pub_ = create_publisher<px4_msgs::msg::OffboardControlMode>(
       "fmu/in/offboard_control_mode", 10);
@@ -140,6 +147,9 @@ private:
     trust_ = std::clamp(msg.point.x, 0.0, 1.0);
     residual_ = std::max(0.0, msg.point.y);
     authority_scale_ = std::clamp(msg.point.z, min_authority_scale_, 1.0);
+    if (!has_target_authority_) {
+      target_authority_ = authority_scale_;
+    }
 
     if (trust_ < 0.35 && residual_ > 1.0) {
       fault_label_ = "suspected_attack";
@@ -153,7 +163,25 @@ private:
   void handle_integrity_diagnostics(const diagnostic_msgs::msg::DiagnosticArray & msg)
   {
     if (!msg.status.empty() && !msg.status.front().message.empty()) {
-      fault_label_ = msg.status.front().message;
+      const auto & status = msg.status.front();
+      fault_label_ = status.message;
+      for (const auto & item : status.values) {
+        try {
+          if (item.key == "target_authority") {
+            target_authority_ = std::clamp(std::stod(item.value), 0.0, 1.0);
+            has_target_authority_ = true;
+          } else if (item.key == "applied_authority") {
+            authority_scale_ = std::clamp(std::stod(item.value), min_authority_scale_, 1.0);
+          } else if (item.key == "hard_override_active") {
+            hard_override_active_ = (item.value == "true" || item.value == "1");
+          }
+        } catch (const std::exception &) {
+          RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "Ignoring malformed integrity diagnostic %s=%s",
+            item.key.c_str(), item.value.c_str());
+        }
+      }
     }
   }
 
@@ -173,19 +201,29 @@ private:
     ++tick_count_;
     const int64_t timestamp = timestamp_us();
     const auto now = get_clock()->now();
+    double dt_s = 0.1;
+    if (last_tick_time_.nanoseconds() > 0) {
+      dt_s = std::max(0.0, (now - last_tick_time_).seconds());
+    }
+    last_tick_time_ = now;
     const bool odometry_stale = !has_odometry_ ||
       ((now - last_odometry_time_).nanoseconds() / 1000000 > stale_timeout_ms_);
 
     const std::array<double, 3> current = odometry_stale ? nominal_setpoint_ : current_position_;
-    const std::string fault = odometry_stale ? "suspected_attack" : fault_label_;
-    const double authority = odometry_stale ? 0.15 : authority_scale_;
+    const bool hard_override = odometry_stale || hard_override_active_;
+    const std::string fault = hard_override ? "hard_safety_override" : fault_label_;
+    const double target_authority = hard_override ? min_authority_scale_ : target_authority_;
+    const double applied_authority = hard_override ? min_authority_scale_ : authority_scale_;
     std::array<double, 3> mission = nominal_setpoint_;
     double mission_yaw = nominal_yaw_;
 
+    if (supervisor_.mode() != SupervisorMode::DEGRADED_HOLD) {
+      mission_elapsed_s_ += dt_s;
+    }
+
     if (mission_params_.mode == "circle" || mission_params_.mode == "figure8") {
-      const double elapsed_s = (now - start_time_).seconds();
-      mission = circle_mission_setpoint(mission_params_, elapsed_s, authority);
-      mission_yaw = circle_mission_yaw(mission_params_, elapsed_s, authority);
+      mission = circle_mission_setpoint(mission_params_, mission_elapsed_s_, applied_authority);
+      mission_yaw = circle_mission_yaw(mission_params_, mission_elapsed_s_, applied_authority);
     }
 
     std::array<double, 3> nominal = mission;
@@ -193,7 +231,9 @@ private:
     if (bt_tree_ && bt_blackboard_) {
       bt_blackboard_->set("current_position", current);
       bt_blackboard_->set("fault_label", fault);
-      bt_blackboard_->set("authority_scale", authority);
+      bt_blackboard_->set("authority_scale", applied_authority);
+      bt_blackboard_->set("target_authority", target_authority);
+      bt_blackboard_->set("operation_context", std::string{to_string(supervisor_.operation_context())});
       bt_blackboard_->set("mission_setpoint", mission);
       bt_blackboard_->set("mission_yaw", mission_yaw);
       bt_blackboard_->set("obstacles", obstacles_);
@@ -211,11 +251,13 @@ private:
     }
 
     const SetpointCommand command = supervisor_.step(
-      authority,
+      target_authority,
+      applied_authority,
       fault,
       current,
       nominal,
-      yaw);
+      yaw,
+      dt_s);
 
     publish_offboard_mode(timestamp);
     publish_setpoint(timestamp, command);
@@ -225,7 +267,13 @@ private:
       arm(timestamp);
     }
 
-    publish_diagnostics(timestamp, command, odometry_stale);
+    publish_diagnostics(
+      timestamp,
+      command,
+      odometry_stale,
+      hard_override,
+      target_authority,
+      applied_authority);
   }
 
   void publish_offboard_mode(int64_t timestamp)
@@ -311,7 +359,10 @@ private:
   void publish_diagnostics(
     int64_t timestamp,
     const SetpointCommand & command,
-    bool odometry_stale)
+    bool odometry_stale,
+    bool hard_override,
+    double target_authority,
+    double applied_authority)
   {
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.name = "twinguard/formation_supervisor_drone_" + std::to_string(drone_id_);
@@ -325,14 +376,20 @@ private:
       kv("trust", std::to_string(trust_)),
       kv("residual", std::to_string(residual_)),
       kv("authority_scale", std::to_string(authority_scale_)),
+      kv("target_authority", std::to_string(target_authority)),
+      kv("applied_authority", std::to_string(applied_authority)),
+      kv("commanded_authority", std::to_string(supervisor_.commanded_authority())),
+      kv("operation_context", to_string(supervisor_.operation_context())),
       kv("fault_label", fault_label_),
       kv("planner_mode", planner_mode_),
       kv("hold", command.hold ? "true" : "false"),
+      kv("mission_paused", command.hold ? "true" : "false"),
       kv("velocity_limit_mps", std::to_string(command.velocity_limit)),
       kv("setpoint_x", std::to_string(command.position[0])),
       kv("setpoint_y", std::to_string(command.position[1])),
       kv("setpoint_z", std::to_string(command.position[2])),
       kv("odometry_stale", odometry_stale ? "true" : "false"),
+      kv("hard_override_active", hard_override ? "true" : "false"),
       kv("offboard_requested", offboard_requested_ ? "true" : "false"),
       kv("arm_requested", arm_requested_ ? "true" : "false"),
     };
@@ -354,7 +411,11 @@ private:
   double trust_{1.0};
   double residual_{0.0};
   double authority_scale_{1.0};
+  double target_authority_{1.0};
+  double mission_elapsed_s_{0.0};
   bool has_odometry_{false};
+  bool has_target_authority_{false};
+  bool hard_override_active_{false};
   bool auto_arm_{false};
   bool force_arm_{false};
   bool offboard_requested_{false};
@@ -369,6 +430,7 @@ private:
   std::unique_ptr<BT::Tree> bt_tree_;
   rclcpp::Time start_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_odometry_time_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_tick_time_{0, 0, RCL_ROS_TIME};
   OffboardSupervisor supervisor_;
   rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr trust_sub_;
   rclcpp::Subscription<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_sub_;
