@@ -163,6 +163,7 @@ class TestIntegritySupervisorPipeline(unittest.TestCase):
         )
         self.assertEqual(mode, "nominal")
         self.assertEqual(values.get("hold"), "false")
+        self.assertEqual(values.get("hard_override_active"), "false")
         nominal_authority = float(values["authority_scale"])
         self.assertGreater(nominal_authority, 0.9)
         self.assertIsNotNone(self.latest_trust)

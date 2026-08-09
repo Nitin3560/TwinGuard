@@ -165,15 +165,19 @@ private:
     if (!msg.status.empty() && !msg.status.front().message.empty()) {
       const auto & status = msg.status.front();
       fault_label_ = status.message;
+      bool saw_target_authority = false;
+      bool saw_hard_override = false;
       for (const auto & item : status.values) {
         try {
           if (item.key == "target_authority") {
             target_authority_ = std::clamp(std::stod(item.value), 0.0, 1.0);
             has_target_authority_ = true;
+            saw_target_authority = true;
           } else if (item.key == "applied_authority") {
             authority_scale_ = std::clamp(std::stod(item.value), min_authority_scale_, 1.0);
           } else if (item.key == "hard_override_active") {
             hard_override_active_ = (item.value == "true" || item.value == "1");
+            saw_hard_override = true;
           }
         } catch (const std::exception &) {
           RCLCPP_WARN_THROTTLE(
@@ -181,6 +185,13 @@ private:
             "Ignoring malformed integrity diagnostic %s=%s",
             item.key.c_str(), item.value.c_str());
         }
+      }
+      if (!saw_hard_override) {
+        hard_override_active_ = status.message == "hard_safety_override";
+      }
+      if (!saw_target_authority && status.message != "hard_safety_override") {
+        has_target_authority_ = false;
+        target_authority_ = authority_scale_;
       }
     }
   }
