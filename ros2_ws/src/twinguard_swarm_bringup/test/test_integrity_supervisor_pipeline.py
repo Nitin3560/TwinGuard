@@ -133,10 +133,17 @@ class TestIntegritySupervisorPipeline(unittest.TestCase):
             rclpy.spin_once(self.node, timeout_sec=0.05)
             time.sleep(0.02)
 
-    def _wait_for_supervisor_mode(self, expected_modes, timeout_sec):
+    def _wait_for_supervisor_mode(self, expected_modes, timeout_sec, position=None):
         deadline = time.time() + timeout_sec
         last_seen = None
+        msg = None
+        if position is not None:
+            msg = VehicleOdometry()
+            msg.position = [float(p) for p in position]
+            msg.velocity = [0.0, 0.0, 0.0]
         while time.time() < deadline:
+            if msg is not None:
+                self.odom_pub.publish(msg)
             rclpy.spin_once(self.node, timeout_sec=0.05)
             if self.latest_supervisor_diag is not None:
                 values = _diag_values(self.latest_supervisor_diag)
@@ -151,7 +158,9 @@ class TestIntegritySupervisorPipeline(unittest.TestCase):
 
     def test_trust_gated_pipeline_reacts_and_recovers(self):
         self._publish_position((0.0, 0.0, 0.0), seconds=1.0)
-        mode, values = self._wait_for_supervisor_mode({"nominal"}, timeout_sec=3.0)
+        mode, values = self._wait_for_supervisor_mode(
+            {"nominal"}, timeout_sec=3.0, position=(0.0, 0.0, 0.0)
+        )
         self.assertEqual(mode, "nominal")
         self.assertEqual(values.get("hold"), "false")
         nominal_authority = float(values["authority_scale"])
@@ -161,7 +170,9 @@ class TestIntegritySupervisorPipeline(unittest.TestCase):
         self.assertGreater(self.latest_trust.point.x, 0.9)
 
         self._publish_position((10.0, 0.0, 0.0), seconds=0.5)
-        mode, values = self._wait_for_supervisor_mode({"degraded_hold"}, timeout_sec=5.0)
+        mode, values = self._wait_for_supervisor_mode(
+            {"degraded_hold"}, timeout_sec=5.0, position=(10.0, 0.0, 0.0)
+        )
         self.assertEqual(mode, "degraded_hold")
         degraded_authority = float(values["authority_scale"])
         self.assertLess(degraded_authority, nominal_authority)
@@ -177,7 +188,9 @@ class TestIntegritySupervisorPipeline(unittest.TestCase):
         self.assertEqual(list(self.latest_setpoint.position), frozen_position)
 
         self._publish_position((0.0, 0.0, 0.0), seconds=1.0)
-        mode, values = self._wait_for_supervisor_mode({"nominal"}, timeout_sec=6.0)
+        mode, values = self._wait_for_supervisor_mode(
+            {"nominal"}, timeout_sec=6.0, position=(0.0, 0.0, 0.0)
+        )
         self.assertEqual(mode, "nominal")
         self.assertEqual(values.get("hold"), "false")
 
