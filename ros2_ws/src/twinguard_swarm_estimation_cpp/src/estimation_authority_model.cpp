@@ -19,13 +19,17 @@ EstimationAuthorityResult EstimationAuthorityModel::evaluate(
   const EstimationAuthorityInput & input) const
 {
   EstimationAuthorityResult result;
-  const double max_variance = std::max({
-    input.position_variance[0],
-    input.position_variance[1],
-    input.position_variance[2],
-  });
-  result.position_sigma_m = std::isfinite(max_variance) && max_variance > 0.0 ?
-    std::sqrt(max_variance) : 0.0;
+  double max_variance = 0.0;
+  bool variance_valid = true;
+  for (double variance : input.position_variance) {
+    if (!std::isfinite(variance) || variance < 0.0) {
+      variance_valid = false;
+      break;
+    }
+    max_variance = std::max(max_variance, variance);
+  }
+  result.position_sigma_m = variance_valid ? std::sqrt(max_variance) :
+    std::numeric_limits<double>::infinity();
   result.position_nis = input.position_nis;
   result.velocity_nis = input.velocity_nis;
   result.measurement_age_ms = input.measurement_age_ms;

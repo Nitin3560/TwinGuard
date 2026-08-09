@@ -1,10 +1,12 @@
 #include "twinguard_swarm_estimation_cpp/ekf_estimator.hpp"
+#include "twinguard_swarm_estimation_cpp/estimation_authority_model.hpp"
 #include "twinguard_swarm_integrity_cpp/hard_safety_monitor.hpp"
 #include "twinguard_swarm_integrity_cpp/trust_scorer.hpp"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <string>
@@ -34,7 +36,15 @@ public:
     px4_position_noise_std_ = declare_parameter<double>("px4_position_noise_std", 0.25);
     base_vo_noise_std_ = declare_parameter<double>("base_vo_noise_std", 0.5);
     min_authority_ = declare_parameter<double>("min_authority", 0.15);
+    EstimationAuthorityConfig authority_config;
+    authority_config.max_position_sigma_m =
+      declare_parameter<double>("authority_max_position_sigma_m", 1.0);
+    authority_config.nis_limit = declare_parameter<double>("authority_nis_limit", 10.0);
+    authority_config.stale_timeout_ms = static_cast<double>(stale_timeout_ms_);
+    required_sensor_mask_ = static_cast<std::uint32_t>(
+      declare_parameter<int>("required_sensor_mask", SENSOR_PX4_ODOMETRY));
     ekf_ = EkfEstimator(process_noise_std_);
+    authority_model_ = EstimationAuthorityModel(authority_config);
     scorer_ = twinguard::integrity::TrustScorer(1.2, 0.90, min_authority_);
 
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
@@ -177,6 +187,8 @@ private:
       state.x(2),
     };
     const auto trust = scorer_.update(measured_position_, fused_position);
+    const auto authority = authority_model_.evaluate(make_authority_input(state, age_ms, now));
+    const double target_authority = std::min(trust.authority_scale, authority.estimation_factor);
 
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.name = "twinguard_ekf_integrity_drone_" + std::to_string(drone_id_);
@@ -188,12 +200,23 @@ private:
     status.values = {
       kv("trust", std::to_string(trust.trust)),
       kv("residual", std::to_string(trust.residual)),
-      kv("authority_scale", std::to_string(trust.authority_scale)),
+      kv("authority_scale", std::to_string(target_authority)),
+      kv("residual_authority_scale", std::to_string(trust.authority_scale)),
+      kv("estimation_factor", std::to_string(authority.estimation_factor)),
+      kv("covariance_factor", std::to_string(authority.covariance_factor)),
+      kv("nis_factor", std::to_string(authority.nis_factor)),
+      kv("freshness_factor", std::to_string(authority.freshness_factor)),
+      kv("availability_factor", std::to_string(authority.availability_factor)),
+      kv("estimation_limiting_reason", authority.estimation_limiting_reason),
+      kv("position_sigma_m", std::to_string(authority.position_sigma_m)),
       kv("odometry_age_ms", std::to_string(age_ms)),
       kv("position_nis", std::to_string(latest_position_nis_)),
+      kv("velocity_nis", std::to_string(latest_vo_nis_)),
       kv("visual_odometry_nis", std::to_string(latest_vo_nis_)),
       kv("visual_odometry_quality", std::to_string(latest_vo_quality_)),
       kv("visual_odometry_active", has_visual_odometry_ ? "true" : "false"),
+      kv("measurement_age_ms", std::to_string(authority.measurement_age_ms)),
+      kv("active_sensor_mask", std::to_string(authority.active_sensor_mask)),
     };
 
     diagnostic_msgs::msg::DiagnosticArray diagnostics;
@@ -206,7 +229,7 @@ private:
     trust_state.header.frame_id = "map";
     trust_state.point.x = trust.trust;
     trust_state.point.y = trust.residual;
-    trust_state.point.z = trust.authority_scale;
+    trust_state.point.z = target_authority;
     trust_pub_->publish(trust_state);
   }
 
@@ -229,6 +252,7 @@ private:
     int64_t age_ms,
     const twinguard::integrity::HardSafetyResult & hard_result)
   {
+    const auto authority = authority_model_.evaluate(make_authority_input(ekf_.state(), age_ms, stamp));
     diagnostic_msgs::msg::DiagnosticStatus status;
     status.name = "twinguard_ekf_integrity_drone_" + std::to_string(drone_id_);
     status.hardware_id = "uav_" + std::to_string(drone_id_);
@@ -242,11 +266,21 @@ private:
       kv("transition_reason", twinguard::integrity::to_string(hard_result.transition_reason)),
       kv("target_authority", std::to_string(hard_result.target_authority)),
       kv("authority_scale", std::to_string(hard_result.target_authority)),
+      kv("estimation_factor", std::to_string(authority.estimation_factor)),
+      kv("covariance_factor", std::to_string(authority.covariance_factor)),
+      kv("nis_factor", std::to_string(authority.nis_factor)),
+      kv("freshness_factor", std::to_string(authority.freshness_factor)),
+      kv("availability_factor", std::to_string(authority.availability_factor)),
+      kv("estimation_limiting_reason", authority.estimation_limiting_reason),
+      kv("position_sigma_m", std::to_string(authority.position_sigma_m)),
       kv("odometry_age_ms", std::to_string(age_ms)),
       kv("position_nis", std::to_string(latest_position_nis_)),
+      kv("velocity_nis", std::to_string(latest_vo_nis_)),
       kv("visual_odometry_nis", std::to_string(latest_vo_nis_)),
       kv("visual_odometry_quality", std::to_string(latest_vo_quality_)),
       kv("visual_odometry_active", has_visual_odometry_ ? "true" : "false"),
+      kv("measurement_age_ms", std::to_string(authority.measurement_age_ms)),
+      kv("active_sensor_mask", std::to_string(authority.active_sensor_mask)),
     };
 
     diagnostic_msgs::msg::DiagnosticArray diagnostics;
@@ -263,12 +297,46 @@ private:
     trust_pub_->publish(trust_state);
   }
 
+  EstimationAuthorityInput make_authority_input(
+    const EkfState & state,
+    int64_t age_ms,
+    const rclcpp::Time & now) const
+  {
+    EstimationAuthorityInput input;
+    input.position_variance = {
+      state.P(0, 0),
+      state.P(1, 1),
+      state.P(2, 2),
+    };
+    input.position_nis = latest_position_nis_;
+    input.velocity_nis = latest_vo_nis_;
+    input.measurement_age_ms = static_cast<double>(age_ms);
+    input.required_sensor_mask = required_sensor_mask_;
+    input.active_sensor_mask = active_sensor_mask(now);
+    return input;
+  }
+
+  std::uint32_t active_sensor_mask(const rclcpp::Time & now) const
+  {
+    std::uint32_t mask = 0u;
+    if (has_odometry_) {
+      mask |= SENSOR_PX4_ODOMETRY;
+    }
+    if (has_visual_odometry_ &&
+      (now - last_vo_time_).nanoseconds() / 1000000 <= stale_timeout_ms_)
+    {
+      mask |= SENSOR_VISUAL_ODOMETRY;
+    }
+    return mask;
+  }
+
   int drone_id_{0};
   int stale_timeout_ms_{500};
   double process_noise_std_{0.5};
   double px4_position_noise_std_{0.25};
   double base_vo_noise_std_{0.5};
   double min_authority_{0.15};
+  std::uint32_t required_sensor_mask_{SENSOR_PX4_ODOMETRY};
   double latest_position_nis_{0.0};
   double latest_vo_nis_{0.0};
   double latest_vo_quality_{0.0};
@@ -280,6 +348,7 @@ private:
   rclcpp::Time last_odometry_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_vo_time_{0, 0, RCL_ROS_TIME};
   EkfEstimator ekf_{0.5};
+  EstimationAuthorityModel authority_model_;
   twinguard::integrity::HardSafetyMonitor hard_safety_monitor_;
   twinguard::integrity::TrustScorer scorer_;
   rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr odometry_sub_;
