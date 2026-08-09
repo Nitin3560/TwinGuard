@@ -100,6 +100,9 @@ ament_export_dependencies(Eigen3 OpenCV)
 if(BUILD_TESTING)
   ament_add_gtest(test_ekf_estimator test/test_ekf_estimator.cpp)
   target_link_libraries(test_ekf_estimator twinguard_estimation_core)
+
+  ament_add_gtest(test_estimation_authority_model test/test_estimation_authority_model.cpp)
+  target_link_libraries(test_estimation_authority_model twinguard_estimation_core)
 endif()
 
 ament_package()
