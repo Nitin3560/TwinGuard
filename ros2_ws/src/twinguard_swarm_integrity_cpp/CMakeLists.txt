@@ -24,6 +24,7 @@ endif()
 include_directories(include)
 
 add_library(twinguard_integrity_core
+  src/hard_safety_monitor.cpp
   src/trust_scorer.cpp
   src/offboard_supervisor.cpp
 )
@@ -97,6 +98,9 @@ ament_export_targets(export_twinguard_integrity_core HAS_LIBRARY_TARGET)
 if(BUILD_TESTING)
   ament_add_gtest(test_trust_scorer test/test_trust_scorer.cpp)
   target_link_libraries(test_trust_scorer twinguard_integrity_core)
+
+  ament_add_gtest(test_hard_safety_monitor test/test_hard_safety_monitor.cpp)
+  target_link_libraries(test_hard_safety_monitor twinguard_integrity_core)
 endif()
 
 ament_package()

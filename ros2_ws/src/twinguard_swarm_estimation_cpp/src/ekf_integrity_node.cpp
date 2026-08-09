@@ -1,4 +1,5 @@
 #include "twinguard_swarm_estimation_cpp/ekf_estimator.hpp"
+#include "twinguard_swarm_integrity_cpp/hard_safety_monitor.hpp"
 #include "twinguard_swarm_integrity_cpp/trust_scorer.hpp"
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
@@ -31,7 +33,9 @@ public:
     process_noise_std_ = declare_parameter<double>("process_noise_std", 0.5);
     px4_position_noise_std_ = declare_parameter<double>("px4_position_noise_std", 0.25);
     base_vo_noise_std_ = declare_parameter<double>("base_vo_noise_std", 0.5);
+    min_authority_ = declare_parameter<double>("min_authority", 0.15);
     ekf_ = EkfEstimator(process_noise_std_);
+    scorer_ = twinguard::integrity::TrustScorer(1.2, 0.90, min_authority_);
 
     diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
       "integrity_diagnostics", 10);
@@ -140,19 +144,33 @@ private:
 
   void publish_score()
   {
-    if (!has_odometry_) {
-      publish_waiting_diagnostic("waiting_for_px4_vehicle_odometry");
-      return;
-    }
-
     const auto now = get_clock()->now();
-    const int64_t age_ms = (now - last_odometry_time_).nanoseconds() / 1000000;
-    if (age_ms > stale_timeout_ms_) {
-      publish_waiting_diagnostic("stale_px4_vehicle_odometry");
-      return;
-    }
+    const int64_t age_ms = has_odometry_ ?
+      (now - last_odometry_time_).nanoseconds() / 1000000 : 0;
 
     const auto & state = ekf_.state();
+    twinguard::integrity::HardSafetyInput hard_input;
+    hard_input.authority_floor = min_authority_;
+    hard_input.has_valid_localization_source = has_odometry_;
+    hard_input.estimator_stale = has_odometry_ && age_ms > stale_timeout_ms_;
+    hard_input.covariance_required = true;
+    hard_input.state_values.reserve(state.x.size());
+    for (int i = 0; i < state.x.size(); ++i) {
+      hard_input.state_values.push_back(state.x(i));
+    }
+    hard_input.covariance_values.reserve(state.P.size());
+    for (int row = 0; row < state.P.rows(); ++row) {
+      for (int col = 0; col < state.P.cols(); ++col) {
+        hard_input.covariance_values.push_back(state.P(row, col));
+      }
+    }
+
+    const auto hard_result = hard_safety_monitor_.evaluate(hard_input);
+    if (hard_result.hard_override_active) {
+      publish_hard_override(now, age_ms, hard_result);
+      return;
+    }
+
     const std::array<double, 3> fused_position{
       state.x(0),
       state.x(1),
@@ -206,11 +224,51 @@ private:
     diagnostics_pub_->publish(diagnostics);
   }
 
+  void publish_hard_override(
+    const rclcpp::Time & stamp,
+    int64_t age_ms,
+    const twinguard::integrity::HardSafetyResult & hard_result)
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "twinguard_ekf_integrity_drone_" + std::to_string(drone_id_);
+    status.hardware_id = "uav_" + std::to_string(drone_id_);
+    status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+    status.message = "hard_safety_override";
+    status.values = {
+      kv("hard_override_active", "true"),
+      kv("hard_override_reason", hard_result.diagnostic_reason),
+      kv("integrity_state", twinguard::integrity::to_string(hard_result.integrity_state)),
+      kv("operation_context", twinguard::integrity::to_string(hard_result.operation_context)),
+      kv("transition_reason", twinguard::integrity::to_string(hard_result.transition_reason)),
+      kv("target_authority", std::to_string(hard_result.target_authority)),
+      kv("authority_scale", std::to_string(hard_result.target_authority)),
+      kv("odometry_age_ms", std::to_string(age_ms)),
+      kv("position_nis", std::to_string(latest_position_nis_)),
+      kv("visual_odometry_nis", std::to_string(latest_vo_nis_)),
+      kv("visual_odometry_quality", std::to_string(latest_vo_quality_)),
+      kv("visual_odometry_active", has_visual_odometry_ ? "true" : "false"),
+    };
+
+    diagnostic_msgs::msg::DiagnosticArray diagnostics;
+    diagnostics.header.stamp = stamp;
+    diagnostics.status.push_back(status);
+    diagnostics_pub_->publish(diagnostics);
+
+    geometry_msgs::msg::PointStamped trust_state;
+    trust_state.header.stamp = diagnostics.header.stamp;
+    trust_state.header.frame_id = "map";
+    trust_state.point.x = 0.0;
+    trust_state.point.y = 0.0;
+    trust_state.point.z = hard_result.target_authority;
+    trust_pub_->publish(trust_state);
+  }
+
   int drone_id_{0};
   int stale_timeout_ms_{500};
   double process_noise_std_{0.5};
   double px4_position_noise_std_{0.25};
   double base_vo_noise_std_{0.5};
+  double min_authority_{0.15};
   double latest_position_nis_{0.0};
   double latest_vo_nis_{0.0};
   double latest_vo_quality_{0.0};
@@ -222,6 +280,7 @@ private:
   rclcpp::Time last_odometry_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_vo_time_{0, 0, RCL_ROS_TIME};
   EkfEstimator ekf_{0.5};
+  twinguard::integrity::HardSafetyMonitor hard_safety_monitor_;
   twinguard::integrity::TrustScorer scorer_;
   rclcpp::Subscription<px4_msgs::msg::VehicleOdometry>::SharedPtr odometry_sub_;
   rclcpp::Subscription<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr vo_diag_sub_;
